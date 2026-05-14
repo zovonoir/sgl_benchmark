@@ -1,0 +1,119 @@
+"""Benchmark runner - performance stress testing.
+
+Orchestrates container lifecycle and invokes run_case.sh inside the container
+for each test case, then generates a summary report.
+"""
+
+import sys
+from pathlib import Path
+
+from ..config import SuiteConfig, TestCaseConfig
+from ..report import generate_summary
+from .base import BaseRunner
+
+
+class BenchmarkRunner(BaseRunner):
+    """Runs performance benchmarks by invoking run_case.sh inside Docker."""
+
+    def execute(self) -> None:
+        for idx, test_case in enumerate(self.config.test_configs):
+            case_id = f"{idx + 1:02d}"
+            case_name = self._build_case_name(case_id, test_case)
+            case_host_dir = self.run_dir / case_name
+            case_host_dir.mkdir(parents=True, exist_ok=True)
+
+            print(f"\n>>> [{case_id}/{len(self.config.test_configs)}] {case_name}")
+            print(f">>> CONC={test_case.concurrency} ISL={test_case.isl} "
+                  f"OSL={test_case.osl} NP={test_case.num_prompts}")
+
+            # Each test case gets a fresh container
+            self.container.cleanup()
+            self.container.start()
+            self.container.run_post_start_commands()
+
+            env = self._build_case_env(case_name, test_case)
+
+            # Execute run_case.sh inside container, streaming output
+            exec_id, output_stream = self.container.exec_run(
+                cmd=["bash", "/simple-suite/run_case.sh"],
+                environment=env,
+                workdir="/simple-suite",
+                stream=True,
+            )
+
+            for chunk in output_stream:
+                sys.stdout.buffer.write(chunk)
+                sys.stdout.buffer.flush()
+
+            # Check exit code
+            exit_info = self.container._client.api.exec_inspect(exec_id)
+            exit_code = exit_info.get("ExitCode", -1)
+            if exit_code != 0:
+                raise RuntimeError(f"Case {case_name} failed with exit code {exit_code}")
+
+            self.container.cleanup()
+
+        # Generate summary report
+        generate_summary(self.run_dir)
+
+        print(f"\n>>> All cases finished")
+        print(f">>> Summary report: {self.run_dir}/suite_summary_report.txt")
+
+    def dry_run(self) -> None:
+        print(f"\n--- Benchmark Plan ---")
+        print(f"Backend: {self.config.bench_backend}")
+        print(f"Random range ratio: {self.config.random_range_ratio}")
+        print(f"Request rate: {self.config.request_rate}")
+        print(f"Burstiness: {self.config.burstiness}")
+        print(f"Test cases: {len(self.config.test_configs)}")
+
+        for idx, tc in enumerate(self.config.test_configs):
+            case_id = f"{idx + 1:02d}"
+            case_name = self._build_case_name(case_id, tc)
+            print(f"\n  Case {case_id}: {case_name}")
+            print(f"    Concurrency: {tc.concurrency}")
+            print(f"    Input length (ISL): {tc.isl}")
+            print(f"    Output length (OSL): {tc.osl}")
+            print(f"    Num prompts: {tc.num_prompts}")
+
+            if self.config.bench_backend == "sglang":
+                print(f"    Tool: python3 -m sglang.bench_serving --backend sglang")
+                print(f"    Endpoint: /generate (SGLang native)")
+            else:
+                print(f"    Tool: python3 benchmark_serving.py --backend vllm")
+                print(f"    Endpoint: /v1/completions (OpenAI compat)")
+
+    def _build_case_name(self, case_id: str, tc: TestCaseConfig) -> str:
+        return (f"case_{case_id}_conc{tc.concurrency}_isl{tc.isl}"
+                f"_osl{tc.osl}_np{tc.num_prompts}")
+
+    def _build_case_env(self, case_name: str, tc: TestCaseConfig) -> dict:
+        """Build the complete environment for docker exec run_case.sh."""
+        env = {
+            "CASE_NAME": case_name,
+            "CASE_OUTPUT_DIR": f"/simple-suite-output/{case_name}",
+            "MODEL_PATH": self.config.model_path,
+            "MODEL_PREFIX": self.config.model_prefix,
+            "IMAGE": self.config.image,
+            "PRECISION": self.config.precision,
+            "RUNNER_TYPE": self.config.runner_type,
+            "FRAMEWORK": self.config.framework,
+            "RANDOM_RANGE_RATIO": str(self.config.random_range_ratio),
+            "REQUEST_RATE": self.config.request_rate,
+            "BURSTINESS": str(self.config.burstiness),
+            "PORT": str(self.config.port),
+            "CONC": str(tc.concurrency),
+            "ISL": str(tc.isl),
+            "OSL": str(tc.osl),
+            "NUM_PROMPTS": str(tc.num_prompts),
+            "SERVER_ARGS_SERIALIZED": "\x1e".join(self.config.server_args),
+            "BENCH_BACKEND": self.config.bench_backend,
+            "WATCHDOG_TIMEOUT": str(self.config.watchdog_timeout),
+        }
+
+        # Add container env overrides
+        for spec in self.config.container_env_overrides:
+            k, v = spec.split("=", 1)
+            env[k] = v
+
+        return env

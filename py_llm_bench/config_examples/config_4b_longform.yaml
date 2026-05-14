@@ -1,0 +1,30 @@
+# Qwen3.5-4B longform config
+image: "atom-sglang:latest"
+model_path: "/.cache/huggingface/Qwen3.5-4B"
+model_prefix: "qwen3.5_4b"
+host_model_mount_path: "/raid/models"
+
+run_mode: longform
+port: 8888
+enable_thinking: false
+
+longform_prompts:
+  - "请写一篇关于人工智能对未来教育影响的深度分析文章，至少包含5个小节。"
+  - "Write a detailed tutorial on building a REST API with Python Flask, including authentication and database integration."
+
+container_env_overrides:
+  - "SGLANG_DISABLE_CUDNN_CHECK=1"
+
+extra_docker_args:
+  - "-e"
+  - "HIP_VISIBLE_DEVICES=0"
+  - "-e"
+  - "CUDA_VISIBLE_DEVICES=0"
+
+server_args:
+  - "--tensor-parallel-size"
+  - "1"
+  - "--trust-remote-code"
+  - "--mem-fraction-static"
+  - "0.85"
+  - "--disable-radix-cache"

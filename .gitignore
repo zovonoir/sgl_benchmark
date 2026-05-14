@@ -1,5 +1,6 @@
 # Test results
-runs/run_*/
+runs/
+*/runs/
 
 # Python
 __pycache__/
@@ -11,3 +12,5 @@ __pycache__/
 *~
 .vscode/
 .idea/
+
+.claude
