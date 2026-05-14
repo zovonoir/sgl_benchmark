@@ -44,7 +44,12 @@ class ServerManager:
             "--host", "0.0.0.0",
             "--port", str(self.config.port),
         ]
-        cmd.extend(self.config.server_args)
+        # server_args supports both formats:
+        #   - "--tensor-parallel-size 1"   (single string with space)
+        #   - "--tensor-parallel-size", "1" (two separate items, legacy)
+        #   - "--trust-remote-code"         (flag without value)
+        for arg in self.config.server_args:
+            cmd.extend(arg.split())
         cmd.extend(["--watchdog-timeout", str(self.config.watchdog_timeout)])
         cmd.extend(["--soft-watchdog-timeout", str(self.config.watchdog_timeout)])
         if skip_warmup:

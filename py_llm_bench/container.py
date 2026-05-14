@@ -22,21 +22,30 @@ class ContainerError(Exception):
 
 
 def _parse_extra_docker_args(args: list[str]) -> dict[str, str]:
-    """Parse extra_docker_args list (e.g. ["-e", "KEY=VALUE"]) into an env dict.
+    """Parse extra_docker_args list into an env dict.
 
-    Only `-e KEY=VALUE` pairs are supported. Other flags are ignored with a warning.
+    Supports two formats:
+      - "KEY=VALUE"           (recommended, e.g. "HIP_VISIBLE_DEVICES=0")
+      - "-e", "KEY=VALUE"     (legacy bash-style, also accepted)
     """
     env = {}
     i = 0
     while i < len(args):
-        if args[i] == "-e" and i + 1 < len(args):
+        item = args[i]
+        if item == "-e" and i + 1 < len(args):
+            # Legacy format: "-e", "KEY=VALUE" as two separate items
             kv = args[i + 1]
             if "=" in kv:
                 k, v = kv.split("=", 1)
                 env[k] = v
             i += 2
+        elif "=" in item and not item.startswith("-"):
+            # Direct format: "KEY=VALUE"
+            k, v = item.split("=", 1)
+            env[k] = v
+            i += 1
         else:
-            print(f"[container] WARNING: unsupported extra_docker_arg: {args[i]}", file=sys.stderr)
+            print(f"[container] WARNING: unsupported extra_docker_arg: {item}", file=sys.stderr)
             i += 1
     return env
 

@@ -291,21 +291,17 @@ container_env_overrides:
 
 ### GPU 选择
 
-通过 Docker 参数指定使用哪些 GPU：
+通过 `extra_docker_args` 指定使用哪些 GPU，直接写 `KEY=VALUE` 格式：
 
 ```yaml
 # TP=1（单卡）
 extra_docker_args:
-  - "-e"
   - "HIP_VISIBLE_DEVICES=0"        # AMD GPU
-  - "-e"
   - "CUDA_VISIBLE_DEVICES=0"       # NVIDIA GPU
 
 # TP=2（双卡）
 extra_docker_args:
-  - "-e"
   - "HIP_VISIBLE_DEVICES=4,5"
-  - "-e"
   - "CUDA_VISIBLE_DEVICES=4,5"
 ```
 
@@ -325,15 +321,12 @@ extra_container_mounts:
 
 ```yaml
 server_args:
-  - "--tensor-parallel-size"
-  - "1"
+  - "--tensor-parallel-size 1"
   - "--trust-remote-code"
-  - "--mem-fraction-static"
-  - "0.9"
+  - "--mem-fraction-static 0.9"
   - "--disable-radix-cache"
-  - "--attention-backend"
-  - "aiter"
-  # 每个参数名和参数值单独一行
+  - "--attention-backend aiter"
+  # 带值的参数写在一行，flag 参数单独一行
 ```
 
 ### 容器启动后自定义指令
@@ -372,23 +365,18 @@ container_env_overrides:
   - "SGLANG_USE_AITER=1"
 
 extra_docker_args:
-  - "-e"
   - "HIP_VISIBLE_DEVICES=4"
-  - "-e"
   - "CUDA_VISIBLE_DEVICES=4"
 
 extra_container_mounts:
   - "/raid/users/code/ATOM:/code_backup/ATOM"
 
 server_args:
-  - "--attention-backend"
-  - "aiter"
+  - "--attention-backend aiter"
   - "--trust-remote-code"
-  - "--mem-fraction-static"
-  - "0.9"
+  - "--mem-fraction-static 0.9"
   - "--disable-radix-cache"
-  - "--max-running-requests"
-  - "224"
+  - "--max-running-requests 224"
 
 test_configs:
   - concurrency: 224
@@ -414,17 +402,13 @@ container_env_overrides:
   - "SGLANG_DISABLE_CUDNN_CHECK=1"
 
 extra_docker_args:
-  - "-e"
   - "HIP_VISIBLE_DEVICES=0"
-  - "-e"
   - "CUDA_VISIBLE_DEVICES=0"
 
 server_args:
-  - "--tensor-parallel-size"
-  - "1"
+  - "--tensor-parallel-size 1"
   - "--trust-remote-code"
-  - "--mem-fraction-static"
-  - "0.85"
+  - "--mem-fraction-static 0.85"
   - "--disable-radix-cache"
 ```
 
@@ -446,17 +430,13 @@ container_env_overrides:
   - "SGLANG_DISABLE_CUDNN_CHECK=1"
 
 extra_docker_args:
-  - "-e"
   - "HIP_VISIBLE_DEVICES=0"
-  - "-e"
   - "CUDA_VISIBLE_DEVICES=0"
 
 server_args:
-  - "--tensor-parallel-size"
-  - "1"
+  - "--tensor-parallel-size 1"
   - "--trust-remote-code"
-  - "--mem-fraction-static"
-  - "0.85"
+  - "--mem-fraction-static 0.85"
   - "--disable-radix-cache"
 ```
 

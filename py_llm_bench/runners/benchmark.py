@@ -106,7 +106,10 @@ class BenchmarkRunner(BaseRunner):
             "ISL": str(tc.isl),
             "OSL": str(tc.osl),
             "NUM_PROMPTS": str(tc.num_prompts),
-            "SERVER_ARGS_SERIALIZED": "\x1e".join(self.config.server_args),
+            # Expand "--key value" strings into separate items, then serialize with \x1e
+            "SERVER_ARGS_SERIALIZED": "\x1e".join(
+                part for arg in self.config.server_args for part in arg.split()
+            ),
             "BENCH_BACKEND": self.config.bench_backend,
             "WATCHDOG_TIMEOUT": str(self.config.watchdog_timeout),
         }
