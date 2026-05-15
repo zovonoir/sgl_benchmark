@@ -58,9 +58,10 @@ class SuiteConfig(BaseModel):
     eval_limit: int | None = None
     multiturn_turns_file: str | None = None
 
-    # Arrays
+    # Arrays / Dicts
     container_env: list[str] = Field(default_factory=list)
     extra_container_mounts: list[str] = Field(default_factory=list)
+    docker_run_args: dict = Field(default_factory=dict)
     server_args: list[str] = Field(default_factory=list)
     post_start_commands: list[str] = Field(default_factory=list)
     test_configs: list[TestCaseConfig] = Field(default_factory=list)

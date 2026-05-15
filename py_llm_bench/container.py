@@ -87,7 +87,8 @@ class ContainerManager:
                 env[k] = v
 
         try:
-            self._container = self._client.containers.run(
+            # Base docker run kwargs
+            run_kwargs = dict(
                 image=self.config.image,
                 name=self.container_name,
                 detach=True,
@@ -105,6 +106,27 @@ class ContainerManager:
                 environment=env,
                 mounts=mounts,
             )
+
+            # Apply user-specified docker run args (shm_size, ulimits, etc.)
+            for k, v in self.config.docker_run_args.items():
+                # Handle ulimits specially: convert dict to docker Ulimit objects
+                if k == "ulimits":
+                    import docker.types
+                    ulimit_list = []
+                    for ul_name, ul_val in v.items():
+                        if isinstance(ul_val, dict):
+                            ulimit_list.append(docker.types.Ulimit(
+                                name=ul_name, soft=ul_val.get("soft", 0), hard=ul_val.get("hard", 0),
+                            ))
+                        else:
+                            ulimit_list.append(docker.types.Ulimit(
+                                name=ul_name, soft=ul_val, hard=ul_val,
+                            ))
+                    run_kwargs["ulimits"] = ulimit_list
+                else:
+                    run_kwargs[k] = v
+
+            self._container = self._client.containers.run(**run_kwargs)
         except APIError as e:
             raise ContainerError(f"Failed to start container: {e}") from e
 
@@ -271,5 +293,6 @@ class ContainerManager:
             "devices": ["/dev/kfd", "/dev/dri"],
             "network_mode": "host",
             "privileged": True,
+            "docker_run_args": self.config.docker_run_args if self.config.docker_run_args else None,
             "post_start_commands": self.config.post_start_commands,
         }

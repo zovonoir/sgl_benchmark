@@ -317,6 +317,23 @@ extra_container_mounts:
   - "/host/path2:/container/path2:ro"    # 只读挂载
 ```
 
+### Docker 运行参数
+
+传递给 Docker SDK `containers.run()` 的额外参数，用于控制容器运行时行为：
+
+```yaml
+docker_run_args:
+  shm_size: "128g"              # 共享内存大小
+  ulimits:                      # ulimit 设置
+    core:                       # 禁用 core dump
+      soft: 0
+      hard: 0
+  # mem_limit: "256g"           # 内存限制
+  # cpuset_cpus: "0-31"         # CPU 绑定
+```
+
+参数名与 [Docker SDK 文档](https://docker-py.readthedocs.io/en/stable/containers.html#docker.models.containers.ContainerCollection.run) 一致。
+
 ### SGLang 服务参数
 
 传递给 `sglang.launch_server` 的额外参数：

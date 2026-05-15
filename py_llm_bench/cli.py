@@ -73,6 +73,11 @@ def _print_dry_run(config: SuiteConfig, run_dir: Path, script_dir: Path) -> None
     for m in desc["mounts"]:
         print(f"    {m}")
 
+    if desc.get("docker_run_args"):
+        print(f"\n  Docker run args:")
+        for k, v in desc["docker_run_args"].items():
+            print(f"    {k}: {v}")
+
     print(f"\n  Environment variables ({len(desc['environment'])}):")
     for k, v in sorted(desc["environment"].items()):
         print(f"    {k}={v}")

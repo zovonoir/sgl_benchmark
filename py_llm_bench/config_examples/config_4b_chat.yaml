@@ -15,6 +15,13 @@ container_env:
   - "HIP_VISIBLE_DEVICES=0"
   - "CUDA_VISIBLE_DEVICES=0"
 
+docker_run_args:
+  shm_size: "128g"
+  ulimits:
+    core:
+      soft: 0
+      hard: 0
+
 server_args:
   - "--tensor-parallel-size 1"
   - "--trust-remote-code"

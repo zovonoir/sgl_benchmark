@@ -24,6 +24,13 @@ container_env:
   - "HIP_VISIBLE_DEVICES=5"
   - "CUDA_VISIBLE_DEVICES=5"
 
+docker_run_args:
+  shm_size: "128g"
+  ulimits:
+    core:
+      soft: 0
+      hard: 0
+
 server_args:
   - "--attention-backend aiter"
   - "--reasoning-parser qwen3"

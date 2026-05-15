@@ -28,6 +28,13 @@ container_env:
 extra_container_mounts:
   - "/raid/users/jialzhu/code_backup/sglang-atom/ATOM:/code_backup/ATOM"
 
+docker_run_args:
+  shm_size: "128g"
+  ulimits:
+    core:
+      soft: 0
+      hard: 0
+
 server_args:
   - "--attention-backend aiter"
   - "--reasoning-parser qwen3"

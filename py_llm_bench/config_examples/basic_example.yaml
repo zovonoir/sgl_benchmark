@@ -37,6 +37,13 @@ extra_container_mounts:
 # SGLang server 启动参数
 # 带值的参数写在一行 "--key value"，flag 参数单独一行 "--flag"
 # -----------------------------------------------------------------------------
+docker_run_args:
+  shm_size: "128g"
+  ulimits:
+    core:
+      soft: 0
+      hard: 0
+
 server_args:
   - "--attention-backend aiter"
   - "--reasoning-parser qwen3"
