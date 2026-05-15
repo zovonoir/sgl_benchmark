@@ -18,7 +18,7 @@ class ChatRunner(BaseRunner):
         self.container.start()
         self.container.run_post_start_commands()
         self.server.start(skip_warmup=True)
-        self.server.wait_healthy(timeout=120)
+        self.server.wait_healthy()
 
         chat_log = self.run_dir / "chat_log.txt"
         self._write_header(chat_log)
