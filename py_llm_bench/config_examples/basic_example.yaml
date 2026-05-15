@@ -15,7 +15,7 @@ bench_backend: sglang
 precision: fp8
 port: 37660
 
-container_env_overrides:
+container_env:
   - "SGLANG_DISABLE_CUDNN_CHECK=1"
   - "SGLANG_USE_CUDA_IPC_TRANSPORT=1"
   - "SGLANG_VLM_CACHE_SIZE_MB=8192"
@@ -26,19 +26,9 @@ container_env_overrides:
   - "SGLANG_EXTERNAL_MODEL_PACKAGE=atom.plugin.sglang.models"
   - "AITER_QUICK_REDUCE_QUANTIZATION=INT4"
   - "SGLANG_AITER_FP8_PREFILL_ATTN=0"
-
-# -----------------------------------------------------------------------------
-# GPU 选择与额外 Docker 环境变量
-# 直接写 KEY=VALUE 格式，在 docker run 阶段注入
-# -----------------------------------------------------------------------------
-extra_docker_args:
   - "HIP_VISIBLE_DEVICES=0"
   - "CUDA_VISIBLE_DEVICES=0"
-  # - "PYTHONPATH=/code_backup/ATOM:/opt/sglang/python"
 
-# -----------------------------------------------------------------------------
-# 额外挂载（宿主机路径:容器路径[:ro]）
-# -----------------------------------------------------------------------------
 extra_container_mounts:
   - "/raid/users/jialzhu/code_backup/sglang-atom/ATOM:/code_backup/ATOM"
   # - "/host/path:/container/path:ro"

@@ -9,10 +9,8 @@ eval_tasks: gsm8k
 eval_num_fewshot: 5
 port: 8888
 
-container_env_overrides:
+container_env:
   - "SGLANG_DISABLE_CUDNN_CHECK=1"
-
-extra_docker_args:
   - "HIP_VISIBLE_DEVICES=0"
   - "CUDA_VISIBLE_DEVICES=0"
 

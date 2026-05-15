@@ -59,9 +59,11 @@ class SuiteConfig(BaseModel):
     multiturn_turns_file: str | None = None
 
     # Arrays
-    container_env_overrides: list[str] = Field(default_factory=list)
+    container_env: list[str] = Field(default_factory=list)
     extra_container_mounts: list[str] = Field(default_factory=list)
-    extra_docker_args: list[str] = Field(default_factory=list)
+    # Legacy aliases (merged into container_env during loading)
+    container_env_overrides: list[str] = Field(default_factory=list, exclude=True)
+    extra_docker_args: list[str] = Field(default_factory=list, exclude=True)
     server_args: list[str] = Field(default_factory=list)
     post_start_commands: list[str] = Field(default_factory=list)
     test_configs: list[TestCaseConfig] = Field(default_factory=list)
@@ -139,5 +141,18 @@ def load_config(config_path: str, cli_overrides: dict | None = None) -> SuiteCon
         for k, v in cli_overrides.items():
             if v is not None:
                 data[k] = v
+
+    # Merge legacy fields into container_env
+    merged_env = list(data.get("container_env", []))
+    for legacy_key in ("container_env_overrides", "extra_docker_args"):
+        for item in data.pop(legacy_key, []):
+            # extra_docker_args may have "-e" prefixes, strip them
+            if item == "-e":
+                continue
+            if item.startswith("-"):
+                continue
+            if "=" in item and item not in merged_env:
+                merged_env.append(item)
+    data["container_env"] = merged_env
 
     return SuiteConfig(**data)

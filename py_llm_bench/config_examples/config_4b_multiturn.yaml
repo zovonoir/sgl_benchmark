@@ -19,10 +19,8 @@ multiturn_turns:
 # Alternative: load turns from a JSON file
 # multiturn_turns_file: "./multiturn_turns.json"
 
-container_env_overrides:
+container_env:
   - "SGLANG_DISABLE_CUDNN_CHECK=1"
-
-extra_docker_args:
   - "HIP_VISIBLE_DEVICES=0"
   - "CUDA_VISIBLE_DEVICES=0"
 

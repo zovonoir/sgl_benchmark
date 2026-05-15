@@ -286,32 +286,25 @@ multiturn_turns:
 # 两者设其一即可，multiturn_turns 优先
 ```
 
-### 容器环境变量
+### 容器环境变量（含 GPU 选择）
 
-注入到容器内的环境变量，用于控制推理框架行为：
+所有容器环境变量统一通过 `container_env` 配置，在 `docker run` 阶段一次性注入。包括框架控制参数和 GPU 选择：
 
 ```yaml
-container_env_overrides:
+container_env:
+  # 框架控制
   - "SGLANG_DISABLE_CUDNN_CHECK=1"
   - "SGLANG_USE_AITER=1"
   - "SGLANG_ROCM_USE_AITER_LINEAR_SHUFFLE=1"
   - "AITER_QUICK_REDUCE_QUANTIZATION=INT4"
-```
-
-### GPU 选择
-
-通过 `extra_docker_args` 指定使用哪些 GPU，直接写 `KEY=VALUE` 格式：
-
-```yaml
-# TP=1（单卡）
-extra_docker_args:
+  # GPU 选择（TP=1 单卡）
   - "HIP_VISIBLE_DEVICES=0"        # AMD GPU
   - "CUDA_VISIBLE_DEVICES=0"       # NVIDIA GPU
 
-# TP=2（双卡）
-extra_docker_args:
-  - "HIP_VISIBLE_DEVICES=4,5"
-  - "CUDA_VISIBLE_DEVICES=4,5"
+# TP=2（双卡）示例：
+# container_env:
+#   - "HIP_VISIBLE_DEVICES=4,5"
+#   - "CUDA_VISIBLE_DEVICES=4,5"
 ```
 
 ### 额外挂载
@@ -369,11 +362,9 @@ bench_backend: sglang
 precision: fp8
 port: 8888
 
-container_env_overrides:
+container_env:
   - "SGLANG_DISABLE_CUDNN_CHECK=1"
   - "SGLANG_USE_AITER=1"
-
-extra_docker_args:
   - "HIP_VISIBLE_DEVICES=4"
   - "CUDA_VISIBLE_DEVICES=4"
 
@@ -407,10 +398,8 @@ eval_tasks: gsm8k
 eval_num_fewshot: 5
 port: 8888
 
-container_env_overrides:
+container_env:
   - "SGLANG_DISABLE_CUDNN_CHECK=1"
-
-extra_docker_args:
   - "HIP_VISIBLE_DEVICES=0"
   - "CUDA_VISIBLE_DEVICES=0"
 
@@ -435,10 +424,8 @@ enable_thinking: false
 # chat_prompt: "你好"   # 取消注释启用单次模式
 port: 8888
 
-container_env_overrides:
+container_env:
   - "SGLANG_DISABLE_CUDNN_CHECK=1"
-
-extra_docker_args:
   - "HIP_VISIBLE_DEVICES=0"
   - "CUDA_VISIBLE_DEVICES=0"
 
@@ -531,7 +518,7 @@ runs/run_<时间戳>/_multiturn_turns.json              # 对话轮次定义
 
 2. 修改必填参数（`image`、`model_path`、`model_prefix`、`host_model_mount_path`）
 
-3. 修改 GPU 选择（`extra_docker_args` 中的 `HIP_VISIBLE_DEVICES` / `CUDA_VISIBLE_DEVICES`）
+3. 修改 GPU 选择（`container_env` 中的 `HIP_VISIBLE_DEVICES` / `CUDA_VISIBLE_DEVICES`）
 
 4. 根据需要调整 `server_args`、`test_configs` 等
 

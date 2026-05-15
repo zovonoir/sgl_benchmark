@@ -23,35 +23,6 @@ class ContainerError(Exception):
     """Docker container lifecycle failure."""
 
 
-def _parse_extra_docker_args(args: list[str]) -> dict[str, str]:
-    """Parse extra_docker_args list into an env dict.
-
-    Supports two formats:
-      - "KEY=VALUE"           (recommended, e.g. "HIP_VISIBLE_DEVICES=0")
-      - "-e", "KEY=VALUE"     (legacy bash-style, also accepted)
-    """
-    env = {}
-    i = 0
-    while i < len(args):
-        item = args[i]
-        if item == "-e" and i + 1 < len(args):
-            # Legacy format: "-e", "KEY=VALUE" as two separate items
-            kv = args[i + 1]
-            if "=" in kv:
-                k, v = kv.split("=", 1)
-                env[k] = v
-            i += 2
-        elif "=" in item and not item.startswith("-"):
-            # Direct format: "KEY=VALUE"
-            k, v = item.split("=", 1)
-            env[k] = v
-            i += 1
-        else:
-            print(f"[container] WARNING: unsupported extra_docker_arg: {item}", file=sys.stderr)
-            i += 1
-    return env
-
-
 class ContainerManager:
     """Manages Docker container lifecycle for a benchmark run."""
 
@@ -109,14 +80,11 @@ class ContainerManager:
             "HF_HOME": "/.cache/huggingface/",
         }
 
-        # Parse extra_docker_args for -e flags
-        extra_env = _parse_extra_docker_args(self.config.extra_docker_args)
-        env.update(extra_env)
-
-        # Container env overrides (format: "KEY=VALUE")
-        for spec in self.config.container_env_overrides:
-            k, v = spec.split("=", 1)
-            env[k] = v
+        # container_env: all user-specified env vars (format: "KEY=VALUE")
+        for spec in self.config.container_env:
+            if "=" in spec:
+                k, v = spec.split("=", 1)
+                env[k] = v
 
         try:
             self._container = self._client.containers.run(
@@ -279,11 +247,10 @@ class ContainerManager:
             "CUDA_VISIBLE_DEVICES": "0,1,2,3,4,5,6,7",
             "HF_HOME": "/.cache/huggingface/",
         }
-        extra_env = _parse_extra_docker_args(self.config.extra_docker_args)
-        env.update(extra_env)
-        for spec in self.config.container_env_overrides:
-            k, v = spec.split("=", 1)
-            env[k] = v
+        for spec in self.config.container_env:
+            if "=" in spec:
+                k, v = spec.split("=", 1)
+                env[k] = v
 
         mounts = [
             f"{self.config.host_model_mount_path} -> /.cache/huggingface/",

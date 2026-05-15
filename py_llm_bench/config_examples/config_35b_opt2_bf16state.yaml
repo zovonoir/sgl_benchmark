@@ -10,7 +10,7 @@ bench_backend: sglang
 precision: fp8
 port: 37660
 
-container_env_overrides:
+container_env:
   - "SGLANG_DISABLE_CUDNN_CHECK=1"
   - "SGLANG_USE_CUDA_IPC_TRANSPORT=1"
   - "SGLANG_VLM_CACHE_SIZE_MB=8192"
@@ -22,15 +22,8 @@ container_env_overrides:
   - "AITER_QUICK_REDUCE_QUANTIZATION=INT4"
   - "SGLANG_AITER_FP8_PREFILL_ATTN=0"
   - "SGLANG_MAMBA_SSM_DTYPE=bfloat16"
-
-# extra_container_mounts:
-#   - "/raid/users/jialzhu/code_backup/sglang-atom/ATOM:/code_backup/ATOM"
-
-extra_docker_args:
   - "HIP_VISIBLE_DEVICES=1"
   - "CUDA_VISIBLE_DEVICES=1"
-
-# - "PYTHONPATH=/code_backup/ATOM:/opt/sglang/python"
 
 server_args:
   - "--attention-backend aiter"
@@ -59,7 +52,6 @@ eval_num_fewshot: 5
 eval_max_gen_toks: 2048
 eval_num_concurrent: 224
 eval_batch_size: "auto"
-
 
 # longform 模式专用
 longform_prompts:
