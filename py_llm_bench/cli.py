@@ -65,18 +65,15 @@ def _print_dry_run(config: SuiteConfig, run_dir: Path, script_dir: Path) -> None
     desc = cm.describe()
     print(f"  Image: {desc['image']}")
     print(f"  Container name: {desc['container_name']}")
-    print(f"  Network: {desc['network_mode']}")
-    print(f"  Privileged: {desc['privileged']}")
-    print(f"  Devices: {', '.join(desc['devices'])}")
+
+    if config.docker_run_args:
+        print(f"\n  Docker run args:")
+        for k, v in config.docker_run_args.items():
+            print(f"    {k}: {v}")
 
     print(f"\n  Mounts ({len(desc['mounts'])}):")
     for m in desc["mounts"]:
         print(f"    {m}")
-
-    if desc.get("docker_run_args"):
-        print(f"\n  Docker run args:")
-        for k, v in desc["docker_run_args"].items():
-            print(f"    {k}: {v}")
 
     print(f"\n  Environment variables ({len(desc['environment'])}):")
     for k, v in sorted(desc["environment"].items()):

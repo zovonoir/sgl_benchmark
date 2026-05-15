@@ -87,31 +87,21 @@ class ContainerManager:
                 env[k] = v
 
         try:
-            # Base docker run kwargs
+            # Only image, name, detach, tty, environment, mounts are automatic.
+            # All other docker run parameters come from config.docker_run_args.
             run_kwargs = dict(
                 image=self.config.image,
                 name=self.container_name,
                 detach=True,
                 stdin_open=True,
                 tty=True,
-                user="root",
-                cap_add=["SYS_PTRACE"],
-                security_opt=["seccomp=unconfined"],
-                devices=["/dev/kfd", "/dev/dri"],
-                group_add=["video"],
-                ipc_mode="host",
-                pid_mode="host",
-                network_mode="host",
-                privileged=True,
                 environment=env,
                 mounts=mounts,
             )
 
-            # Apply user-specified docker run args (shm_size, ulimits, etc.)
+            # Apply all user-specified docker run args
             for k, v in self.config.docker_run_args.items():
-                # Handle ulimits specially: convert dict to docker Ulimit objects
                 if k == "ulimits":
-                    import docker.types
                     ulimit_list = []
                     for ul_name, ul_val in v.items():
                         if isinstance(ul_val, dict):
@@ -290,9 +280,6 @@ class ContainerManager:
             "container_name": self.container_name,
             "environment": env,
             "mounts": mounts,
-            "devices": ["/dev/kfd", "/dev/dri"],
-            "network_mode": "host",
-            "privileged": True,
             "docker_run_args": self.config.docker_run_args if self.config.docker_run_args else None,
             "post_start_commands": self.config.post_start_commands,
         }

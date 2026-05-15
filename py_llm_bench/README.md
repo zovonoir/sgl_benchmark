@@ -319,20 +319,29 @@ extra_container_mounts:
 
 ### Docker 运行参数
 
-传递给 Docker SDK `containers.run()` 的额外参数，用于控制容器运行时行为：
+容器运行时参数通过 `docker_run_args` 配置。框架不会自动添加任何参数（容器名和挂载除外），所有 `docker run` 的行为都由用户显式控制：
 
 ```yaml
 docker_run_args:
-  shm_size: "128g"              # 共享内存大小
-  ulimits:                      # ulimit 设置
-    core:                       # 禁用 core dump
+  shm_size: "128g"                          # --shm-size
+  cap_add: ["SYS_PTRACE"]                   # --cap-add
+  security_opt: ["seccomp=unconfined"]       # --security-opt
+  user: "root"                              # --user
+  devices: ["/dev/kfd", "/dev/dri"]          # --device (AMD GPU)
+  group_add: ["video"]                       # --group-add
+  ipc_mode: "host"                          # --ipc
+  pid_mode: "host"                          # --pid
+  network_mode: "host"                      # --network
+  privileged: true                          # --privileged
+  ulimits:                                  # --ulimit
+    core:
       soft: 0
       hard: 0
-  # mem_limit: "256g"           # 内存限制
-  # cpuset_cpus: "0-31"         # CPU 绑定
+  # mem_limit: "256g"                       # --memory
+  # cpuset_cpus: "0-31"                     # --cpuset-cpus
 ```
 
-参数名与 [Docker SDK 文档](https://docker-py.readthedocs.io/en/stable/containers.html#docker.models.containers.ContainerCollection.run) 一致。
+参数名与 [Docker SDK 文档](https://docker-py.readthedocs.io/en/stable/containers.html#docker.models.containers.ContainerCollection.run) 一致。NVIDIA GPU 用户需将 `devices` 改为对应的 NVIDIA 设备路径或使用 `runtime: "nvidia"`。
 
 ### SGLang 服务参数
 
