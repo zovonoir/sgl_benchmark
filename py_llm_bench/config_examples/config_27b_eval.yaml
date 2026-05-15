@@ -8,7 +8,7 @@ host_model_mount_path: "/raid/models"
 run_mode: benchmark
 bench_backend: sglang
 precision: fp8
-port: 37654
+port: 37652
 
 container_env_overrides:
   - "SGLANG_DISABLE_CUDNN_CHECK=1"
@@ -22,13 +22,13 @@ container_env_overrides:
   - "AITER_QUICK_REDUCE_QUANTIZATION=INT4"
   - "SGLANG_AITER_FP8_PREFILL_ATTN=0"
 
-extra_container_mounts:
-  - "/raid/users/jialzhu/code_backup/sglang-atom/ATOM:/code_backup/ATOM"
+# extra_container_mounts:
+#   - "/raid/users/jialzhu/code_backup/sglang-atom/ATOM:/code_backup/ATOM"
 
 extra_docker_args:
   - "HIP_VISIBLE_DEVICES=5"
   - "CUDA_VISIBLE_DEVICES=5"
-  - "PYTHONPATH=/code_backup/ATOM:/opt/sglang/python"
+# - "PYTHONPATH=/code_backup/ATOM:/opt/sglang/python"
 
 server_args:
   - "--attention-backend aiter"

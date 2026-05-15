@@ -5,7 +5,7 @@ model_path: "/.cache/huggingface/Qwen3.5-27B"
 model_prefix: "qwen3.5_moe"
 host_model_mount_path: "/raid/models"
 
-run_mode: benchmark
+run_mode: longform
 bench_backend: sglang
 precision: fp8
 port: 37654
@@ -22,13 +22,13 @@ container_env_overrides:
   - "AITER_QUICK_REDUCE_QUANTIZATION=INT4"
   - "SGLANG_AITER_FP8_PREFILL_ATTN=0"
 
-extra_container_mounts:
-  - "/raid/users/jialzhu/code_backup/sglang-atom/ATOM:/code_backup/ATOM"
+# extra_container_mounts:
+#   - "/raid/users/jialzhu/code_backup/sglang-atom/ATOM:/code_backup/ATOM"
 
 extra_docker_args:
-  - "HIP_VISIBLE_DEVICES=5"
-  - "CUDA_VISIBLE_DEVICES=5"
-  - "PYTHONPATH=/code_backup/ATOM:/opt/sglang/python"
+  - "HIP_VISIBLE_DEVICES=0,1"
+  - "CUDA_VISIBLE_DEVICES=0,1"
+# - "PYTHONPATH=/code_backup/ATOM:/opt/sglang/python"
 
 server_args:
   - "--attention-backend aiter"
@@ -39,6 +39,13 @@ server_args:
   - "--max-prefill-tokens 16384"
   - "--max-running-requests 224"
   - "--disable-radix-cache"
+  - "--tensor-parallel-size 2"
+
+longform_prompts:
+  - "请写一篇关于人工智能对未来教育影响的深度分析文章，至少包含5个小节。"
+  - "Write a detailed tutorial on building a REST API with Python Flask."
+  - "写一篇长文，介绍Galois理论的基本原理和这个理论的发明人的故事"
+
 
 test_configs:
   - concurrency: 224
