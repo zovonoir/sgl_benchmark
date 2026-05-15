@@ -10,6 +10,14 @@ import httpx
 
 from .base import BaseRunner
 
+# ANSI color codes
+_GREEN_BOLD = "\033[1;32m"
+_BLUE_BOLD = "\033[1;34m"
+_DIM = "\033[2m"
+_CYAN = "\033[36m"
+_RESET = "\033[0m"
+_SEPARATOR = f"{_DIM}{'─' * 60}{_RESET}"
+
 
 class ChatRunner(BaseRunner):
     """Runs chat interactions via /v1/chat/completions."""
@@ -24,16 +32,23 @@ class ChatRunner(BaseRunner):
         self._write_header(chat_log)
 
         if self.config.chat_prompt:
-            self._log(chat_log, f"\n>>> Prompt: {self.config.chat_prompt}")
-            self._log(chat_log, "-" * 60)
+            print(f"\n{_GREEN_BOLD}[You]{_RESET} {self.config.chat_prompt}")
+            self._log_file(chat_log, f"\n[You] {self.config.chat_prompt}")
+            print(_SEPARATOR)
+            self._log_file(chat_log, "-" * 60)
+            print(f"{_BLUE_BOLD}[Model]{_RESET}")
+            self._log_file(chat_log, "[Model]")
             self._send_chat(self.config.chat_prompt, chat_log)
-            self._log(chat_log, "-" * 60)
+            print(_SEPARATOR)
+            self._log_file(chat_log, "-" * 60)
         else:
-            self._log(chat_log, "\n>>> Interactive chat mode. Type 'quit' or 'exit' to stop.")
-            self._log(chat_log, "-" * 60)
+            print(f"\n{_CYAN}>>> Interactive chat mode. Type 'quit' or 'exit' to stop.{_RESET}")
+            self._log_file(chat_log, "\n>>> Interactive chat mode. Type 'quit' or 'exit' to stop.")
+            print(_SEPARATOR)
+            self._log_file(chat_log, "-" * 60)
             while True:
                 try:
-                    user_input = input("\n[You] ")
+                    user_input = input(f"\n{_GREEN_BOLD}[You]{_RESET} ")
                 except EOFError:
                     break
                 if user_input in ("quit", "exit"):
@@ -41,15 +56,16 @@ class ChatRunner(BaseRunner):
                 if not user_input:
                     continue
 
-                with open(chat_log, "a") as f:
-                    f.write(f"\n[You] {user_input}\n")
-                print("\n[Model]")
-                with open(chat_log, "a") as f:
-                    f.write("[Model]\n")
+                self._log_file(chat_log, f"\n[You] {user_input}")
+                print(_SEPARATOR)
+                print(f"{_BLUE_BOLD}[Model]{_RESET}")
+                self._log_file(chat_log, "[Model]")
                 self._send_chat(user_input, chat_log)
+                print(_SEPARATOR)
 
-        self._log(chat_log, "\n>>> Chat session ended.")
-        print(f">>> Chat log saved to: {chat_log}")
+        print(f"\n{_CYAN}>>> Chat session ended.{_RESET}")
+        self._log_file(chat_log, "\n>>> Chat session ended.")
+        print(f"{_DIM}>>> Chat log saved to: {chat_log}{_RESET}")
 
     def dry_run(self) -> None:
         print(f"\n--- Chat Plan ---")
@@ -70,8 +86,8 @@ class ChatRunner(BaseRunner):
             f.write(f"Enable thinking: {str(self.config.enable_thinking).lower()}\n")
             f.write("==================================\n\n")
 
-    def _log(self, chat_log: Path, text: str) -> None:
-        print(text)
+    def _log_file(self, chat_log: Path, text: str) -> None:
+        """Write to log file only (no terminal output)."""
         with open(chat_log, "a") as f:
             f.write(text + "\n")
 
@@ -134,7 +150,7 @@ class ChatRunner(BaseRunner):
                 tps = 0
             stats = (f"[tokens: {n_tokens} | TTFT: {ttft_ms:.0f}ms | "
                      f"TPOT: {tpot_ms:.1f}ms | {tps:.1f} tok/s | total: {total_ms:.0f}ms]")
-            print(stats)
+            print(f"{_DIM}{stats}{_RESET}")
             with open(chat_log, "a") as f:
                 f.write(stats + "\n")
 
@@ -148,10 +164,11 @@ class ChatRunner(BaseRunner):
             completion_tokens = usage.get("completion_tokens", "?")
 
             print(content)
-            print(f"[tokens: prompt={prompt_tokens}, completion={completion_tokens}]")
+            stats = f"[tokens: prompt={prompt_tokens}, completion={completion_tokens}]"
+            print(f"{_DIM}{stats}{_RESET}")
 
             with open(chat_log, "a") as f:
                 f.write(content + "\n")
-                f.write(f"[tokens: prompt={prompt_tokens}, completion={completion_tokens}]\n")
+                f.write(stats + "\n")
         except Exception as e:
-            print(f"[Error] {e}", file=sys.stderr)
+            print(f"\033[1;31m[Error] {e}\033[0m", file=sys.stderr)

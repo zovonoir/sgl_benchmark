@@ -239,7 +239,9 @@ eval_num_fewshot: 5                 # 默认值: 5
 eval_max_gen_toks: 2048             # 默认值: 2048
 
 # 并发请求数
-eval_num_concurrent: 224            # 默认值: 224
+# 注意：设置过高会导致大量 retry，建议设为 server --max-running-requests 的一半或更低
+# 例如 server 设置 224，eval 并发建议 64~128，可显著减少 retry 并加快评测
+eval_num_concurrent: 64             # 默认值: 224
 
 # 批处理大小
 eval_batch_size: "auto"             # 默认值: auto
@@ -585,6 +587,10 @@ watchdog_timeout: 900   # 15 分钟
 ### 性能数据跨后端不可比
 
 `bench_backend: vllm` 和 `bench_backend: sglang` 测出的 TPOT 有约 1.5-2ms 系统性差异。对比测试必须使用同一后端。
+
+### lm_eval 出现大量 retry
+
+eval 模式下日志中出现 `Retry attempt 1/2/...` 是因为 `eval_num_concurrent` 设置过高，大量并发请求打满了 server 的 `--max-running-requests` 队列，导致请求被拒绝后重试。**retry 不影响最终结果的正确性**（每个样本最终都会成功），但会拖慢评测速度。建议将 `eval_num_concurrent` 设为 server `--max-running-requests` 的一半或更低（如 64~128）。
 
 ### Dry-run 配置校验失败
 
