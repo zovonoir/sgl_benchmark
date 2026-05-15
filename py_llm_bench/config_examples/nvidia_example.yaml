@@ -1,0 +1,125 @@
+# =============================================================================
+# py_llm_bench NVIDIA 平台完整配置示例
+# 包含所有支持的配置参数，可作为模板复制修改
+# =============================================================================
+
+# ─── 必填参数 ────────────────────────────────────────────────────────────────
+image: "lmsysorg/sglang:latest"
+model_path: "/models/Qwen2.5-72B"
+model_prefix: "qwen2.5_72b"
+host_model_mount_path: "/data/models"
+
+# ─── 运行模式 ────────────────────────────────────────────────────────────────
+# 可选: benchmark / chat / eval / longform / multiturn
+run_mode: benchmark
+bench_backend: sglang                   # sglang 或 vllm
+precision: bf16
+port: 8888
+
+# ─── 容器环境变量 ─────────────────────────────────────────────────────────────
+# 所有环境变量统一在此配置，docker run 阶段一次性注入
+container_env:
+  # GPU 选择
+  - "NVIDIA_VISIBLE_DEVICES=0,1"
+  - "CUDA_VISIBLE_DEVICES=0,1"
+  # 框架控制（根据实际需要增删）
+  # - "NCCL_DEBUG=INFO"
+  # - "NCCL_P2P_DISABLE=1"
+  # - "CUDA_LAUNCH_BLOCKING=1"
+
+# ─── 额外挂载 ────────────────────────────────────────────────────────────────
+extra_container_mounts: []
+  # - "/data/datasets:/datasets:ro"
+  # - "/home/user/scripts:/scripts"
+
+# ─── Docker 运行参数 ─────────────────────────────────────────────────────────
+# 所有 docker run 参数均需显式指定，框架不会自动添加
+docker_run_args:
+  runtime: "nvidia"                     # NVIDIA Container Runtime
+  shm_size: "128g"
+  cap_add: ["SYS_PTRACE"]
+  security_opt: ["seccomp=unconfined"]
+  user: "root"
+  ipc_mode: "host"
+  pid_mode: "host"
+  network_mode: "host"
+  privileged: true
+  ulimits:
+    core:
+      soft: 0
+      hard: 0
+    memlock:
+      soft: -1                          # unlimited，NCCL 需要
+      hard: -1
+  # mem_limit: "256g"
+  # cpuset_cpus: "0-31"
+
+# ─── SGLang 服务参数 ─────────────────────────────────────────────────────────
+# 带值的参数写在一行 "--key value"，flag 参数单独一行
+server_args:
+  - "--tensor-parallel-size 2"
+  - "--trust-remote-code"
+  - "--mem-fraction-static 0.9"
+  - "--disable-radix-cache"
+  - "--chunked-prefill-size 8192"
+  - "--max-prefill-tokens 8192"
+  - "--max-running-requests 128"
+  # - "--quantization fp8"
+  # - "--kv-cache-dtype fp8_e5m2"
+
+# ─── 容器启动后自定义指令 ─────────────────────────────────────────────────────
+# 在容器启动后、server 启动前执行
+post_start_commands: []
+  # - "pip install flash-attn --no-build-isolation"
+  # - "nvidia-smi"
+
+# ─── 通用标注参数 ─────────────────────────────────────────────────────────────
+runner_type: "a100"                     # GPU 类型标注，仅用于结果命名
+framework: "sglang"
+
+# ─── 健康检查与 watchdog ──────────────────────────────────────────────────────
+health_timeout: 240                     # 最大轮次 x 5秒 = 1200秒
+watchdog_timeout: 600                   # SGLang watchdog 超时
+
+# ─── benchmark 模式参数 ──────────────────────────────────────────────────────
+random_range_ratio: 1.0                 # 1.0 = 固定长度
+request_rate: "inf"                     # inf = closed-loop
+burstiness: 1.0
+
+test_configs:
+  - concurrency: 128
+    isl: 4096
+    osl: 2048
+    num_prompts: 256
+  # - concurrency: 64
+  #   isl: 2048
+  #   osl: 512
+  #   num_prompts: 128
+
+# ─── chat 模式参数 ───────────────────────────────────────────────────────────
+chat_stream: true
+chat_max_tokens: 8192
+enable_thinking: false
+# chat_prompt: "Hello, how are you?"    # 取消注释启用单次模式
+
+# ─── eval 模式参数 ───────────────────────────────────────────────────────────
+eval_tasks: "gsm8k"                     # gsm8k / mmlu / hellaswag / arc_easy / winogrande
+eval_num_fewshot: 5
+eval_max_gen_toks: 2048
+eval_num_concurrent: 64                 # 建议设为 max-running-requests 的一半，减少 retry
+eval_batch_size: "auto"
+# eval_limit: 100                       # 限制样本数，调试用
+
+# ─── longform 模式参数 ───────────────────────────────────────────────────────
+longform_prompts:
+  - "Write a comprehensive guide to transformer architecture, covering attention mechanisms, positional encoding, and training techniques."
+  - "请写一篇关于大语言模型在医疗领域应用的深度分析文章，至少包含5个小节。"
+
+# ─── multiturn 模式参数 ──────────────────────────────────────────────────────
+multiturn_turns:
+  - "My name is Alice, I'm a machine learning engineer from San Francisco. I have a golden retriever named Max. Please remember this and explain the transformer architecture."
+  - "We're using PyTorch to train a 7B parameter model on 8 A100 GPUs. What optimization strategies would you recommend?"
+  - "Now please answer: What is my name? Where am I from? What's my pet's name and breed? What framework and hardware are we using?"
+
+# 或从 JSON 文件加载（与 multiturn_turns 二选一）
+# multiturn_turns_file: "./multiturn_turns.json"
