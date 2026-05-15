@@ -1,0 +1,133 @@
+# =============================================================================
+# py_llm_bench 完整配置示例
+# 包含所有支持的配置参数，可作为模板复制修改
+# =============================================================================
+
+# Qwen3.5-27B — SGLang + ATOM plugin
+# ISL=4096, OSL=2048, 并发224, 448 prompts, TP1
+image: "atom-sglang:opt1"
+model_path: "/.cache/huggingface/Qwen3.5-35B-A3B-FP8"
+model_prefix: "qwen3.5_moe"
+host_model_mount_path: "/raid/models"
+
+run_mode: benchmark
+bench_backend: sglang
+precision: fp8
+port: 37660
+
+container_env_overrides:
+  - "SGLANG_DISABLE_CUDNN_CHECK=1"
+  - "SGLANG_USE_CUDA_IPC_TRANSPORT=1"
+  - "SGLANG_VLM_CACHE_SIZE_MB=8192"
+  - "SGLANG_USE_AITER=1"
+  - "SGLANG_ROCM_USE_AITER_LINEAR_SHUFFLE=1"
+  - "SGLANG_ROCM_USE_AITER_LINEAR_FP8HIPB=1"
+  - "SGLANG_USE_AITER_NEW_CA=false"
+  - "SGLANG_EXTERNAL_MODEL_PACKAGE=atom.plugin.sglang.models"
+  - "AITER_QUICK_REDUCE_QUANTIZATION=INT4"
+  - "SGLANG_AITER_FP8_PREFILL_ATTN=0"
+
+# -----------------------------------------------------------------------------
+# GPU 选择与额外 Docker 环境变量
+# 直接写 KEY=VALUE 格式，在 docker run 阶段注入
+# -----------------------------------------------------------------------------
+extra_docker_args:
+  - "HIP_VISIBLE_DEVICES=0"
+  - "CUDA_VISIBLE_DEVICES=0"
+  # - "PYTHONPATH=/code_backup/ATOM:/opt/sglang/python"
+
+# -----------------------------------------------------------------------------
+# 额外挂载（宿主机路径:容器路径[:ro]）
+# -----------------------------------------------------------------------------
+extra_container_mounts:
+  - "/raid/users/jialzhu/code_backup/sglang-atom/ATOM:/code_backup/ATOM"
+  # - "/host/path:/container/path:ro"
+
+# -----------------------------------------------------------------------------
+# SGLang server 启动参数
+# 带值的参数写在一行 "--key value"，flag 参数单独一行 "--flag"
+# -----------------------------------------------------------------------------
+server_args:
+  - "--attention-backend aiter"
+  - "--reasoning-parser qwen3"
+  - "--trust-remote-code"
+  - "--chunked-prefill-size 16384"
+  - "--mem-fraction-static 0.95"
+  - "--max-prefill-tokens 16384"
+  - "--max-running-requests 224"
+  - "--disable-radix-cache"
+
+# -----------------------------------------------------------------------------
+# 容器启动后、server 启动前执行的自定义指令
+# 适合注入自定义配置、安装依赖、修改容器内文件等
+# -----------------------------------------------------------------------------
+post_start_commands: 
+  - "echo ======HELLO WORLD====="
+  # - "pip install some-package"
+
+# -----------------------------------------------------------------------------
+# 通用标注参数（仅用于结果文件命名，不影响实际推理）
+# -----------------------------------------------------------------------------
+runner_type: "mi308x"                   # GPU 类型标注（默认: mi308x）
+framework: "sglang"                     # 推理框架标注（默认: sglang）
+
+# -----------------------------------------------------------------------------
+# 健康检查与 watchdog
+# -----------------------------------------------------------------------------
+health_timeout: 240                     # 健康检查最大轮次，每轮 5 秒（默认: 240 = 1200秒）
+watchdog_timeout: 600                   # SGLang watchdog 超时秒数（默认: 600）
+
+# -----------------------------------------------------------------------------
+# benchmark 模式参数（run_mode: benchmark）
+# -----------------------------------------------------------------------------
+random_range_ratio: 1.0                 # 长度随机比例，1.0=固定长度（默认: 1.0）
+request_rate: "inf"                     # 请求速率，"inf"=closed-loop（默认: inf）
+burstiness: 1.0                         # 突发程度，1.0=Poisson（默认: 1.0）
+
+test_configs:
+  - concurrency: 224
+    isl: 4096
+    osl: 2048
+    num_prompts: 448
+  # 可定义多个 case，依次运行:
+  # - concurrency: 128
+  #   isl: 2048
+  #   osl: 512
+  #   num_prompts: 256
+
+# -----------------------------------------------------------------------------
+# chat 模式参数（run_mode: chat）
+# -----------------------------------------------------------------------------
+chat_stream: true                       # 流式输出（默认: true）
+chat_max_tokens: 8192                   # 最大输出 token 数（默认: 8192）
+enable_thinking: false                  # 启用模型思考过程（默认: false）
+# chat_prompt: "1+1等于几？"            # 设置后为单次模式，不设为交互模式
+
+# -----------------------------------------------------------------------------
+# eval 模式参数（run_mode: eval）
+# -----------------------------------------------------------------------------
+eval_tasks: "gsm8k"                     # lm_eval 任务名（默认: gsm8k）
+eval_num_fewshot: 5                     # few-shot 数量（默认: 5）
+eval_max_gen_toks: 2048                 # 最大生成 token 数（默认: 2048）
+eval_num_concurrent: 224                # 并发请求数（默认: 224）
+eval_batch_size: "auto"                 # 批处理大小（默认: auto）
+# eval_limit: 100                       # 限制评测样本数，调试用（默认: 不限制）
+
+# -----------------------------------------------------------------------------
+# longform 模式参数（run_mode: longform）
+# -----------------------------------------------------------------------------
+longform_prompts:
+  - "请写一篇关于人工智能对未来教育影响的深度分析文章，至少包含5个小节。"
+  - "Write a detailed tutorial on building a REST API with Python Flask."
+
+# -----------------------------------------------------------------------------
+# multiturn 模式参数（run_mode: multiturn）
+# 方式一：直接定义每轮对话内容
+# -----------------------------------------------------------------------------
+multiturn_turns:
+  - "我叫李明，来自上海，是一名数据工程师。请记住这些信息，然后介绍一下 Apache Spark 的核心架构。"
+  - "我们团队正在用 Spark 处理日均10TB的日志数据，存储在 HDFS 上，使用 Parquet 格式。请分析优化策略。"
+  - "现在请回答：我叫什么？来自哪里？我们的数据规模和格式是什么？"
+
+# 方式二：指向外部 JSON 文件（与 multiturn_turns 二选一）
+# multiturn_turns_file: "./multiturn_turns.json"
