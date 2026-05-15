@@ -1,0 +1,75 @@
+# Qwen3.5-27B — SGLang + ATOM plugin
+# ISL=4096, OSL=2048, 并发224, 448 prompts, TP1
+image: "atom-sglang:opt1"
+model_path: "/.cache/huggingface/Qwen3.5-35B-A3B-FP8"
+model_prefix: "qwen3.5_moe"
+host_model_mount_path: "/raid/models"
+
+run_mode: benchmark
+bench_backend: sglang
+precision: fp8
+port: 37660
+
+container_env_overrides:
+  - "SGLANG_DISABLE_CUDNN_CHECK=1"
+  - "SGLANG_USE_CUDA_IPC_TRANSPORT=1"
+  - "SGLANG_VLM_CACHE_SIZE_MB=8192"
+  - "SGLANG_USE_AITER=1"
+  - "SGLANG_ROCM_USE_AITER_LINEAR_SHUFFLE=1"
+  - "SGLANG_ROCM_USE_AITER_LINEAR_FP8HIPB=1"
+  - "SGLANG_USE_AITER_NEW_CA=false"
+  - "SGLANG_EXTERNAL_MODEL_PACKAGE=atom.plugin.sglang.models"
+  - "AITER_QUICK_REDUCE_QUANTIZATION=INT4"
+  - "SGLANG_AITER_FP8_PREFILL_ATTN=0"
+
+# extra_container_mounts:
+#   - "/raid/users/jialzhu/code_backup/sglang-atom/ATOM:/code_backup/ATOM"
+
+extra_docker_args:
+  - "HIP_VISIBLE_DEVICES=7"
+  - "CUDA_VISIBLE_DEVICES=7"
+
+# - "PYTHONPATH=/code_backup/ATOM:/opt/sglang/python"
+
+server_args:
+  - "--attention-backend aiter"
+  - "--reasoning-parser qwen3"
+  - "--trust-remote-code"
+  - "--chunked-prefill-size 16384"
+  - "--mem-fraction-static 0.95"
+  - "--max-prefill-tokens 16384"
+  - "--max-running-requests 224"
+  - "--disable-radix-cache"
+
+test_configs:
+  - concurrency: 224
+    isl: 4096
+    osl: 2048
+    num_prompts: 448
+
+# chat 模式专用
+chat_stream: true
+chat_max_tokens: 8192
+enable_thinking: false
+
+# eval 模式专用
+eval_tasks: "gsm8k"                 # mmlu, hellaswag, arc_easy, winogrande
+eval_num_fewshot: 5
+eval_max_gen_toks: 2048
+eval_num_concurrent: 224
+eval_batch_size: "auto"
+
+
+# longform 模式专用
+longform_prompts:
+  - "请写一篇关于人工智能对未来教育影响的深度分析文章，至少包含5个小节。"
+  - "Write a detailed tutorial on building a REST API with Python Flask."
+
+# multiturn 模式专用
+multiturn_turns:
+  - "我叫李明，来自上海，是一名数据工程师。我养了一只叫「豆豆」的柯基犬，今年2岁。请记住这些信息，然后介绍一下 Apache Spark 的核心架构。"
+  - "谢谢。我们团队正在用 Spark 处理日均10TB的日志数据，存储在 HDFS 上，使用 Parquet 格式。请分析这个场景下的性能优化策略。"
+  - "写一篇介绍哥德尔不完备定理的介绍，包括发现者，发现历史和定理概述，不低于1000字"
+  - "请详细解释群公理以及什么是Abel群什么是Galois群"
+  - "群公理中是否包含交换律?"
+  - "现在请回答：1. 我叫什么名字？来自哪里？2. 我的宠物叫什么？什么品种？3. 我们的数据规模和存储格式是什么？"

@@ -55,6 +55,7 @@ class SuiteConfig(BaseModel):
     eval_max_gen_toks: int = 2048
     eval_num_concurrent: int = 224
     eval_batch_size: str = "auto"
+    eval_limit: int | None = None
     multiturn_turns_file: str | None = None
 
     # Arrays
@@ -107,6 +108,7 @@ _ENV_OVERRIDE_MAP = {
     "EVAL_MAX_GEN_TOKS": "eval_max_gen_toks",
     "EVAL_NUM_CONCURRENT": "eval_num_concurrent",
     "EVAL_BATCH_SIZE": "eval_batch_size",
+    "EVAL_LIMIT": "eval_limit",
     "IMAGE": "image",
     "MODEL_PATH": "model_path",
     "MODEL_PREFIX": "model_prefix",

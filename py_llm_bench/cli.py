@@ -134,6 +134,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--chat-max-tokens", type=int)
     parser.add_argument("--eval-tasks", type=str)
     parser.add_argument("--eval-num-fewshot", type=int)
+    parser.add_argument("--eval-limit", type=int)
     parser.add_argument("--port", type=int)
     parser.add_argument("--bench-backend", type=str, choices=["vllm", "sglang"])
 
@@ -145,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
     # Build CLI overrides dict (only non-None values)
     cli_overrides = {}
     for key in ("run_mode", "chat_prompt", "chat_max_tokens", "eval_tasks",
-                "eval_num_fewshot", "port", "bench_backend"):
+                "eval_num_fewshot", "eval_limit", "port", "bench_backend"):
         val = getattr(args, key, None)
         if val is not None:
             cli_overrides[key] = val

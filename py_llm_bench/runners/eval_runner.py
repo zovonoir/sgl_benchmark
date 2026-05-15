@@ -39,20 +39,16 @@ class EvalRunner(BaseRunner):
             f"--num_fewshot {self.config.eval_num_fewshot} "
             f"--trust_remote_code "
             f"--output_path {eval_output_dir}"
+            + (f" --limit {self.config.eval_limit}" if self.config.eval_limit else "")
         )
 
-        # Build env
-        env = {}
-        for spec in self.config.container_env_overrides:
-            k, v = spec.split("=", 1)
-            env[k] = v
+        # All env vars already injected at docker run time
 
         print(f">>> Running: {eval_cmd}")
 
         log_path = self.run_dir / "lm_eval.log"
         exec_id, output_stream = self.container.exec_run(
             ["bash", "-c", eval_cmd],
-            environment=env if env else None,
             stream=True,
         )
 
@@ -91,6 +87,7 @@ class EvalRunner(BaseRunner):
         print(f"Batch size: {self.config.eval_batch_size}")
         print(f"Max gen tokens: {self.config.eval_max_gen_toks}")
         print(f"Concurrent requests: {self.config.eval_num_concurrent}")
+        print(f"Limit: {self.config.eval_limit if self.config.eval_limit else 'none (full dataset)'}")
         print(f"\nlm_eval command:")
         print(f"  python3 -m lm_eval \\")
         print(f"    --model local-completions \\")
@@ -98,4 +95,6 @@ class EvalRunner(BaseRunner):
         print(f"    --tasks {self.config.eval_tasks} \\")
         print(f"    --batch_size {self.config.eval_batch_size} \\")
         print(f"    --num_fewshot {self.config.eval_num_fewshot} \\")
-        print(f"    --trust_remote_code")
+        print(f"    --trust_remote_code" + (" \\" if self.config.eval_limit else ""))
+        if self.config.eval_limit:
+            print(f"    --limit {self.config.eval_limit}")

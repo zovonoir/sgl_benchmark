@@ -6,6 +6,8 @@ Replaces all docker run/exec/rm shell commands from the bash version.
 
 import getpass
 import os
+import random
+import string
 import sys
 import time
 from pathlib import Path
@@ -57,7 +59,8 @@ class ContainerManager:
         self.config = config
         self.run_dir = run_dir
         self.script_dir = script_dir
-        self.container_name = f"llm_bench_{getpass.getuser()}_{os.getpid()}"
+        _rand = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+        self.container_name = f"llm_bench_{getpass.getuser()}_{os.getpid()}_{_rand}"
         self._client = docker.from_env()
         self._container = None
 
@@ -231,8 +234,9 @@ class ContainerManager:
             if not name.startswith(prefix) or name == self.container_name:
                 continue
 
-            # Extract PID from container name
-            pid_str = name[len(prefix):]
+            # Extract PID from container name (format: llm_bench_{user}_{pid}_{rand})
+            suffix = name[len(prefix):]
+            pid_str = suffix.split("_")[0]
             if not pid_str.isdigit():
                 continue
 

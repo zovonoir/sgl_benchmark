@@ -53,6 +53,9 @@ python3 -m py_llm_bench --config config.yaml --port 9999
 # 临时切换 eval 任务
 python3 -m py_llm_bench --config config.yaml --run-mode eval --eval-tasks mmlu --eval-num-fewshot 0
 
+# 限制评测样本数（快速调试）
+python3 -m py_llm_bench --config config.yaml --run-mode eval --eval-limit 50
+
 # 单次 chat 模式
 python3 -m py_llm_bench --config config_chat.yaml --chat-prompt "1+1等于几？"
 ```
@@ -240,6 +243,10 @@ eval_num_concurrent: 224            # 默认值: 224
 
 # 批处理大小
 eval_batch_size: "auto"             # 默认值: auto
+
+# 限制评测样本数（用于快速调试）
+# 不设置或设为 null 则评测完整数据集
+eval_limit: 100                     # 默认值: 不限制
 ```
 
 ### 长文本生成参数（run_mode: longform）

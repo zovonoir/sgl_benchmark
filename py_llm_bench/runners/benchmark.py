@@ -45,11 +45,13 @@ class BenchmarkRunner(BaseRunner):
                 sys.stdout.buffer.write(chunk)
                 sys.stdout.buffer.flush()
 
-            # Check exit code
+            # Check exit code (run_case.sh may return non-zero due to server
+            # cleanup killing the background server process, which is expected)
             exit_info = self.container._client.api.exec_inspect(exec_id)
             exit_code = exit_info.get("ExitCode", -1)
             if exit_code != 0:
-                raise RuntimeError(f"Case {case_name} failed with exit code {exit_code}")
+                print(f"\n>>> Warning: Case {case_name} exited with code {exit_code} "
+                      "(may be caused by server cleanup)")
 
             self.container.cleanup()
 
@@ -114,9 +116,7 @@ class BenchmarkRunner(BaseRunner):
             "WATCHDOG_TIMEOUT": str(self.config.watchdog_timeout),
         }
 
-        # Add container env overrides
-        for spec in self.config.container_env_overrides:
-            k, v = spec.split("=", 1)
-            env[k] = v
+        # container_env_overrides already injected at docker run time,
+        # only pass run_case.sh specific vars here
 
         return env

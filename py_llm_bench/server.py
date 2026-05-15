@@ -62,15 +62,9 @@ class ServerManager:
         shell_cmd = " ".join(shlex.quote(p) for p in cmd) + " > /tmp/server.log 2>&1"
         print(f">>> Starting server: {' '.join(cmd)}")
 
-        # Build container env for the exec
-        env = {}
-        for spec in self.config.container_env_overrides:
-            k, v = spec.split("=", 1)
-            env[k] = v
-
+        # All env vars already injected at docker run time, no need to pass again
         self.container.exec_run(
             ["bash", "-c", shell_cmd],
-            environment=env if env else None,
             detach=True,
         )
 
