@@ -252,6 +252,29 @@ fi
 "${BENCH_CMD[@]}" || true
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 等待 server 处理完所有 in-flight 请求
+# sglang bench_serving 的进度条 100% 仅表示客户端发完请求，server 端可能仍在 decode
+# ─────────────────────────────────────────────────────────────────────────────
+if kill -0 "$SERVER_PID" 2>/dev/null; then
+  echo "[case] Waiting for server to drain in-flight requests..."
+  for _drain_i in $(seq 1 120); do
+    _running=$(curl -s "http://0.0.0.0:${PORT}/get_server_info" 2>/dev/null \
+      | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('num_running_req', d.get('num_running_requests', -1)))" 2>/dev/null || echo "-1")
+    if [[ "$_running" == "0" ]]; then
+      echo "[case] Server drained all requests"
+      break
+    elif [[ "$_running" == "-1" ]]; then
+      # server 可能已经退出或接口不可用，跳出
+      break
+    fi
+    if (( _drain_i % 10 == 0 )); then
+      echo "[case] Still waiting... $_running requests in-flight"
+    fi
+    sleep 2
+  done
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 生成 meta JSON（记录本次运行的所有配置，用于汇总报告）
 # ─────────────────────────────────────────────────────────────────────────────
 python3 - <<'PYEOF'
