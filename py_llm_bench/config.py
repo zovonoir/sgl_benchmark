@@ -22,6 +22,17 @@ class TestCaseConfig(BaseModel):
     num_prompts: int
 
 
+class ProfileCaseConfig(BaseModel):
+    """A single profiling case."""
+    concurrency: int
+    isl: int
+    osl: int = 5
+    num_prompts: int | None = None      # defaults to concurrency
+    disable_cuda_graph: bool = True
+    skip_server_warmup: bool = True
+    profile_with_stack: bool = True     # collect Python call stacks (large traces but useful for attribution)
+
+
 class SuiteConfig(BaseModel):
     """Complete configuration for a benchmark suite run."""
     model_config = ConfigDict(frozen=True)
@@ -33,7 +44,7 @@ class SuiteConfig(BaseModel):
     host_model_mount_path: str
 
     # Run mode
-    run_mode: Literal["benchmark", "chat", "eval", "longform", "multiturn"] = "benchmark"
+    run_mode: Literal["benchmark", "chat", "eval", "longform", "multiturn", "profile"] = "benchmark"
 
     # Scalars with defaults
     precision: str = "bf16"
@@ -65,6 +76,7 @@ class SuiteConfig(BaseModel):
     server_args: list[str] = Field(default_factory=list)
     post_start_commands: list[str] = Field(default_factory=list)
     test_configs: list[TestCaseConfig] = Field(default_factory=list)
+    profile_configs: list[ProfileCaseConfig] = Field(default_factory=list)
     longform_prompts: list[str] = Field(default_factory=list)
     multiturn_turns: list[str] = Field(default_factory=list)
 
@@ -83,6 +95,8 @@ class SuiteConfig(BaseModel):
             raise ValueError("longform_prompts is required for longform mode")
         if self.run_mode == "multiturn" and not self.multiturn_turns and not self.multiturn_turns_file:
             raise ValueError("Either multiturn_turns or multiturn_turns_file is required for multiturn mode")
+        if self.run_mode == "profile" and not self.profile_configs:
+            raise ValueError("profile_configs is required for profile mode")
         return self
 
 

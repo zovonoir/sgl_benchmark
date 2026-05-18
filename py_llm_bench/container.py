@@ -35,8 +35,12 @@ class ContainerManager:
         self._client = docker.from_env()
         self._container = None
 
-    def start(self) -> None:
-        """Start a new Docker container with all configured mounts and env vars."""
+    def start(self, extra_env: dict | None = None) -> None:
+        """Start a new Docker container with all configured mounts and env vars.
+
+        Args:
+            extra_env: Additional environment variables to inject (e.g. from runner).
+        """
         mounts = [
             docker.types.Mount(
                 target="/.cache/huggingface/",
@@ -85,6 +89,10 @@ class ContainerManager:
             if "=" in spec:
                 k, v = spec.split("=", 1)
                 env[k] = v
+
+        # Extra env from runner (e.g. SGLANG_TORCH_PROFILER_DIR for profile mode)
+        if extra_env:
+            env.update(extra_env)
 
         try:
             # Only image, name, detach, tty, environment, mounts are automatic.
@@ -247,7 +255,7 @@ class ContainerManager:
             if exit_code != 0:
                 raise ContainerError(f"Post-start command failed (exit {exit_code}): {cmd}")
 
-    def describe(self) -> dict:
+    def describe(self, extra_env: dict | None = None) -> dict:
         """Return a description of what this container manager would do (for dry-run)."""
         env = {
             "CUDA_VISIBLE_DEVICES": "0,1,2,3,4,5,6,7",
@@ -257,6 +265,8 @@ class ContainerManager:
             if "=" in spec:
                 k, v = spec.split("=", 1)
                 env[k] = v
+        if extra_env:
+            env.update(extra_env)
 
         mounts = [
             f"{self.config.host_model_mount_path} -> /.cache/huggingface/",

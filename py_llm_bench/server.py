@@ -36,7 +36,8 @@ class ServerManager:
         self._log_thread: threading.Thread | None = None
         self._log_stop = threading.Event()
 
-    def build_server_cmd(self, skip_warmup: bool = False) -> list[str]:
+    def build_server_cmd(self, skip_warmup: bool = False,
+                         extra_args: list[str] | None = None) -> list[str]:
         """Build the sglang server launch command."""
         cmd = [
             "python3", "-m", "sglang.launch_server",
@@ -46,7 +47,6 @@ class ServerManager:
         ]
         # server_args supports both formats:
         #   - "--tensor-parallel-size 1"   (single string with space)
-        #   - "--tensor-parallel-size", "1" (two separate items, legacy)
         #   - "--trust-remote-code"         (flag without value)
         for arg in self.config.server_args:
             cmd.extend(arg.split())
@@ -54,11 +54,15 @@ class ServerManager:
         cmd.extend(["--soft-watchdog-timeout", str(self.config.watchdog_timeout)])
         if skip_warmup:
             cmd.append("--skip-server-warmup")
+        if extra_args:
+            for arg in extra_args:
+                cmd.extend(arg.split())
         return cmd
 
-    def start(self, skip_warmup: bool = False) -> None:
+    def start(self, skip_warmup: bool = False,
+              extra_args: list[str] | None = None) -> None:
         """Start the sglang server in the background inside the container."""
-        cmd = self.build_server_cmd(skip_warmup)
+        cmd = self.build_server_cmd(skip_warmup, extra_args)
         shell_cmd = " ".join(shlex.quote(p) for p in cmd) + " > /tmp/server.log 2>&1"
         print(f">>> Starting server: {' '.join(cmd)}")
 
@@ -147,9 +151,10 @@ class ServerManager:
         time.sleep(5)
         self.wait_healthy()
 
-    def describe(self, skip_warmup: bool = False) -> dict:
+    def describe(self, skip_warmup: bool = False,
+                 extra_args: list[str] | None = None) -> dict:
         """Return a description of the server config (for dry-run)."""
-        cmd = self.build_server_cmd(skip_warmup)
+        cmd = self.build_server_cmd(skip_warmup, extra_args)
         return {
             "server_command": " ".join(cmd),
             "port": self.config.port,

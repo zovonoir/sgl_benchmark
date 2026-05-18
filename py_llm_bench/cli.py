@@ -20,6 +20,7 @@ from .runners.chat import ChatRunner
 from .runners.eval_runner import EvalRunner
 from .runners.longform import LongformRunner
 from .runners.multiturn import MultiturnRunner
+from .runners.profile import ProfileRunner
 from .server import ServerManager
 
 RUNNERS = {
@@ -28,6 +29,7 @@ RUNNERS = {
     "eval": EvalRunner,
     "longform": LongformRunner,
     "multiturn": MultiturnRunner,
+    "profile": ProfileRunner,
 }
 
 
@@ -60,9 +62,14 @@ def _print_dry_run(config: SuiteConfig, run_dir: Path, script_dir: Path) -> None
     print(f"  Runner type: {config.runner_type}")
 
     # 2. Docker container
+    # Profile mode injects SGLANG_TORCH_PROFILER_DIR automatically
+    container_extra_env = None
+    if config.run_mode == "profile" and config.profile_configs:
+        container_extra_env = {"SGLANG_TORCH_PROFILER_DIR": "(auto-set per case)"}
+
     print("\n[2] Docker Container:")
     cm = ContainerManager(config, run_dir, script_dir)
-    desc = cm.describe()
+    desc = cm.describe(extra_env=container_extra_env)
     print(f"  Image: {desc['image']}")
     print(f"  Container name: {desc['container_name']}")
 
@@ -88,7 +95,14 @@ def _print_dry_run(config: SuiteConfig, run_dir: Path, script_dir: Path) -> None
     print("\n[3] SGLang Server:")
     sm = ServerManager(cm, config)
     skip_warmup = config.run_mode in ("chat", "longform", "multiturn")
-    server_desc = sm.describe(skip_warmup)
+    server_extra_args = None
+    if config.run_mode == "profile" and config.profile_configs:
+        # Show server config for first profile case as representative
+        first = config.profile_configs[0]
+        skip_warmup = first.skip_server_warmup
+        if first.disable_cuda_graph:
+            server_extra_args = ["--disable-cuda-graph"]
+    server_desc = sm.describe(skip_warmup, server_extra_args)
     print(f"  Command: {server_desc['server_command']}")
     print(f"  Port: {server_desc['port']}")
     print(f"  Health timeout: {server_desc['health_timeout']}")

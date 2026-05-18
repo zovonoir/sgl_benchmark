@@ -1,0 +1,45 @@
+# Qwen3.5-4B profiling config
+# Collects Torch Profiler traces under online serving load
+image: "atom-sglang:latest"
+model_path: "/.cache/huggingface/Qwen3.5-4B"
+model_prefix: "qwen3.5_4b"
+host_model_mount_path: "/raid/models"
+
+run_mode: profile
+port: 8888
+
+container_env:
+  - "SGLANG_DISABLE_CUDNN_CHECK=1"
+  - "HIP_VISIBLE_DEVICES=0"
+  - "CUDA_VISIBLE_DEVICES=0"
+
+docker_run_args:
+  shm_size: "128g"
+  cap_add: ["SYS_PTRACE"]
+  security_opt: ["seccomp=unconfined"]
+  user: "root"
+  devices: ["/dev/kfd", "/dev/dri"]
+  group_add: ["video"]
+  ipc_mode: "host"
+  pid_mode: "host"
+  network_mode: "host"
+  privileged: true
+  ulimits:
+    core:
+      soft: 0
+      hard: 0
+
+server_args:
+  - "--tensor-parallel-size 1"
+  - "--trust-remote-code"
+  - "--mem-fraction-static 0.9"
+  - "--disable-radix-cache"
+
+# Profile cases: each case starts a fresh server + bench_serving --profile
+profile_configs:
+  - concurrency: 64
+    isl: 2048
+    osl: 5
+    num_prompts: 64          # defaults to concurrency
+    disable_cuda_graph: true  # default true, preserves fine-grained kernel trace
+    skip_server_warmup: true  # default true
