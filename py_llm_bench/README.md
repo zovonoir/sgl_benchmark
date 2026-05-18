@@ -117,14 +117,33 @@ py_llm_bench/
 
 YAML 基础语法：用 `key: value` 表示键值对，用缩进表示层级，用 `-` 表示列表项。`#` 开头为注释。
 
-### 必填参数
+### 容器来源（二选一）
 
-每个配置文件都必须包含以下 4 个参数：
+每个配置文件必须指定**其中一个**（不能同时设置，否则报错）：
 
 ```yaml
-# Docker 镜像名称
+# 方式一：从镜像创建新容器（测试结束后自动删除）
 image: "atom-sglang:latest"
 
+# 方式二：连接已有容器（测试结束后容器保持不变，不会被删除）
+# existing_container: "my_dev_container"
+```
+
+**Attach 模式**（`existing_container`）适用于：
+- 在开发容器中快速测试，不想每次改动都构建新镜像
+- 容器内已有自定义代码或配置
+- 需要保证容器安全，测试后继续使用
+
+Attach 模式下，`docker_run_args` 和 `extra_container_mounts` 会被忽略（容器已存在，无法修改运行参数和挂载）。环境变量通过 `docker exec` 注入。
+
+```yaml
+# Attach 模式下可指定容器内测试套件路径（默认 /simple-suite）
+suite_path_in_container: "/simple-suite"
+```
+
+### 其他必填参数
+
+```yaml
 # 容器内的模型路径
 model_path: "/.cache/huggingface/Qwen3.5-4B"
 
@@ -138,7 +157,7 @@ host_model_mount_path: "/raid/models"
 ### 运行模式
 
 ```yaml
-# 可选值: benchmark / chat / eval / longform / multiturn
+# 可选值: benchmark / chat / eval / longform / multiturn / profile
 run_mode: "benchmark"    # 默认值: benchmark
 ```
 
@@ -594,26 +613,49 @@ runs/run_<时间戳>/profile_01_conc224_isl4096_osl5_np224/
 
 ## 编写新配置
 
+### 从镜像创建新容器
+
 1. 复制最接近的示例配置：
    ```bash
    cp py_llm_bench/config_examples/config_4b_benchmark.yaml my_config.yaml
    ```
 
-2. 修改必填参数（`image`、`model_path`、`model_prefix`、`host_model_mount_path`）
+2. 修改 `image`、`model_path`、`model_prefix`、`host_model_mount_path`
 
 3. 修改 GPU 选择（`container_env` 中的 `HIP_VISIBLE_DEVICES` / `CUDA_VISIBLE_DEVICES`）
 
 4. 根据需要调整 `server_args`、`test_configs` 等
 
-5. 先 dry-run 确认：
+5. 先 dry-run 确认，再正式运行：
    ```bash
    python3 -m py_llm_bench --config my_config.yaml --dry-run
-   ```
-
-6. 正式运行：
-   ```bash
    python3 -m py_llm_bench --config my_config.yaml
    ```
+
+### 连接已有容器
+
+1. 确保容器已启动，容器内有测试套件（挂载或复制均可）
+
+2. 创建配置文件（不写 `image`，写 `existing_container`）：
+   ```yaml
+   existing_container: "my_dev_container"
+   model_path: "/.cache/huggingface/Qwen3.5-4B"
+   model_prefix: "qwen3.5_4b"
+   host_model_mount_path: "/raid/models"
+   run_mode: chat
+   chat_prompt: "hello"
+   port: 8888
+   container_env:
+     - "HF_HOME=/.cache/huggingface/"
+     - "SGLANG_DISABLE_CUDNN_CHECK=1"
+     - "HIP_VISIBLE_DEVICES=0"
+     - "CUDA_VISIBLE_DEVICES=0"
+   server_args:
+     - "--tensor-parallel-size 1"
+     - "--trust-remote-code"
+   ```
+
+3. 测试结束后容器不会被删除，可继续使用
 
 ---
 
