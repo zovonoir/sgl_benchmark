@@ -147,13 +147,6 @@ class ServerManager:
         time.sleep(5)
         self.wait_healthy()
 
-    def stop(self) -> None:
-        """Kill the sglang server process inside the container."""
-        try:
-            self.container.exec_run(["pkill", "-f", "sglang.launch_server"])
-        except Exception:
-            pass
-
     def describe(self, skip_warmup: bool = False) -> dict:
         """Return a description of the server config (for dry-run)."""
         cmd = self.build_server_cmd(skip_warmup)
