@@ -180,15 +180,9 @@ class ContainerManager:
         if self._container is None:
             return
 
-        try:
-            # Try to kill the sglang server first
-            self._container.exec_run(
-                ["pkill", "-f", "sglang.launch_server"],
-            )
-            time.sleep(2)
-        except (APIError, NotFound):
-            pass
-
+        # Do NOT use pkill here -- with --pid=host it would kill sglang processes
+        # across ALL containers on the host. docker rm -f sends SIGKILL to the
+        # container's init process, which terminates all children.
         try:
             self._container.remove(force=True)
         except (APIError, NotFound):

@@ -145,8 +145,9 @@ validate_dependencies() {
 # ─────────────────────────────────────────────────────────────────────────────
 cleanup_container() {
   if docker ps -a --format '{{.Names}}' | grep -Fxq "${CONTAINER_NAME}" 2>/dev/null; then
-    docker exec "${CONTAINER_NAME}" pkill -f sglang.launch_server >/dev/null 2>&1 || true
-    sleep 2
+    # Do NOT use pkill here -- with --pid=host it would kill sglang processes
+    # across ALL containers on the host. docker rm -f sends SIGKILL to the
+    # container's init process, which terminates all children.
     docker rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
   fi
 }
