@@ -39,9 +39,10 @@ class BenchmarkRunner(BaseRunner):
 
             env = self._build_case_env(case_name, test_case)
 
-            # Ensure output directory exists inside container
+            # Ensure output directory exists and is clean inside container
+            # (prevents stale results from previous runs being picked up)
             output_dir = env["CASE_OUTPUT_DIR"]
-            self.container.exec_run(["mkdir", "-p", output_dir])
+            self.container.exec_run(["bash", "-c", f"rm -rf {output_dir} && mkdir -p {output_dir}"])
 
             # Execute run_case.sh inside container, streaming output
             suite_path = self.config.suite_path_in_container
