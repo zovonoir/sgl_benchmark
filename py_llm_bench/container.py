@@ -24,23 +24,75 @@ class ContainerError(Exception):
 
 
 class ContainerManager:
-    """Manages Docker container lifecycle for a benchmark run."""
+    """Manages Docker container lifecycle for a benchmark run.
+
+    Two modes:
+    - Create mode (config.image set): creates a new container via docker run
+    - Attach mode (config.existing_container set): connects to an existing container
+    """
 
     def __init__(self, config: SuiteConfig, run_dir: Path, script_dir: Path):
         self.config = config
         self.run_dir = run_dir
         self.script_dir = script_dir
-        _rand = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
-        self.container_name = f"llm_bench_{getpass.getuser()}_{os.getpid()}_{_rand}"
+        self.attach_mode = bool(config.existing_container)
+        if self.attach_mode:
+            self.container_name = config.existing_container
+        else:
+            _rand = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+            self.container_name = f"llm_bench_{getpass.getuser()}_{os.getpid()}_{_rand}"
         self._client = docker.from_env()
         self._container = None
+        self._extra_start_env = None  # stored for exec_run injection in attach mode
 
     def start(self, extra_env: dict | None = None) -> None:
-        """Start a new Docker container with all configured mounts and env vars.
+        """Start or attach to a Docker container.
+
+        In create mode: creates a new container with all configured mounts and env vars.
+        In attach mode: connects to the existing container and stores env vars for
+        injection via docker exec.
 
         Args:
             extra_env: Additional environment variables to inject (e.g. from runner).
         """
+        if self.attach_mode:
+            self._start_attach(extra_env)
+            return
+
+        self._start_create(extra_env)
+
+    def _start_attach(self, extra_env: dict | None = None) -> None:
+        """Attach to an existing container."""
+        try:
+            self._container = self._client.containers.get(self.container_name)
+        except NotFound:
+            raise ContainerError(
+                f"Container '{self.container_name}' not found. "
+                "Make sure it exists and is running."
+            )
+        except APIError as e:
+            raise ContainerError(f"Failed to connect to container: {e}") from e
+
+        if self._container.status != "running":
+            raise ContainerError(
+                f"Container '{self.container_name}' is not running "
+                f"(status: {self._container.status}). Start it first."
+            )
+
+        # Build env vars to inject via docker exec
+        self._extra_start_env = {}
+        for spec in self.config.container_env:
+            if "=" in spec:
+                k, v = spec.split("=", 1)
+                self._extra_start_env[k] = v
+        if extra_env:
+            self._extra_start_env.update(extra_env)
+
+        print(f">>> Attached to existing container: {self.container_name}")
+        print(f">>> Environment variables will be injected via docker exec")
+
+    def _start_create(self, extra_env: dict | None = None) -> None:
+        """Create a new container."""
         mounts = [
             docker.types.Mount(
                 target="/.cache/huggingface/",
@@ -78,11 +130,8 @@ class ContainerManager:
                 target=dst, source=src, type="bind", read_only=read_only,
             ))
 
-        # Environment variables
-        env = {
-            "CUDA_VISIBLE_DEVICES": "0,1,2,3,4,5,6,7",
-            "HF_HOME": "/.cache/huggingface/",
-        }
+        # Environment variables (all from user config, no hardcoded defaults)
+        env = {}
 
         # container_env: all user-specified env vars (format: "KEY=VALUE")
         for spec in self.config.container_env:
@@ -148,6 +197,13 @@ class ContainerManager:
         if self._container is None:
             raise ContainerError("Container not started")
 
+        # In attach mode, merge stored env vars into every exec call
+        if self.attach_mode and self._extra_start_env:
+            merged_env = dict(self._extra_start_env)
+            if environment:
+                merged_env.update(environment)
+            environment = merged_env
+
         try:
             if detach:
                 return self._container.exec_run(
@@ -184,13 +240,20 @@ class ContainerManager:
             return False
 
     def cleanup(self) -> None:
-        """Stop and remove the container."""
+        """Clean up after test.
+
+        In create mode: remove the container.
+        In attach mode: NEVER remove the container — only release the reference.
+        """
         if self._container is None:
             return
 
-        # Do NOT use pkill here -- with --pid=host it would kill sglang processes
-        # across ALL containers on the host. docker rm -f sends SIGKILL to the
-        # container's init process, which terminates all children.
+        if self.attach_mode:
+            # Attach mode: absolutely do NOT remove the user's container
+            self._container = None
+            return
+
+        # Create mode: safe to remove our own container
         try:
             self._container.remove(force=True)
         except (APIError, NotFound):
@@ -202,7 +265,10 @@ class ContainerManager:
         """Remove stale containers from previous crashed runs.
 
         Only removes containers whose originating PID no longer exists.
+        Skipped entirely in attach mode.
         """
+        if self.attach_mode:
+            return
         user = getpass.getuser()
         prefix = f"llm_bench_{user}_"
 
@@ -257,16 +323,23 @@ class ContainerManager:
 
     def describe(self, extra_env: dict | None = None) -> dict:
         """Return a description of what this container manager would do (for dry-run)."""
-        env = {
-            "CUDA_VISIBLE_DEVICES": "0,1,2,3,4,5,6,7",
-            "HF_HOME": "/.cache/huggingface/",
-        }
+        env = {}
         for spec in self.config.container_env:
             if "=" in spec:
                 k, v = spec.split("=", 1)
                 env[k] = v
         if extra_env:
             env.update(extra_env)
+
+        if self.attach_mode:
+            return {
+                "mode": "attach",
+                "container_name": self.container_name,
+                "suite_path": self.config.suite_path_in_container,
+                "environment": env,
+                "env_injection": "docker exec",
+                "post_start_commands": self.config.post_start_commands,
+            }
 
         mounts = [
             f"{self.config.host_model_mount_path} -> /.cache/huggingface/",
@@ -280,6 +353,7 @@ class ContainerManager:
             mounts.append(f"{parts[0]} -> {parts[1]}" + (f" ({parts[2]})" if len(parts) > 2 else ""))
 
         return {
+            "mode": "create",
             "image": self.config.image,
             "container_name": self.container_name,
             "environment": env,

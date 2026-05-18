@@ -37,8 +37,12 @@ class SuiteConfig(BaseModel):
     """Complete configuration for a benchmark suite run."""
     model_config = ConfigDict(frozen=True)
 
-    # Required (no defaults)
-    image: str
+    # Container source (exactly one of image or existing_container must be set)
+    image: str | None = None
+    existing_container: str | None = None
+    suite_path_in_container: str = "/simple-suite"  # path to test suite inside container
+
+    # Required
     model_path: str
     model_prefix: str
     host_model_mount_path: str
@@ -86,6 +90,14 @@ class SuiteConfig(BaseModel):
         if not Path(v).is_dir():
             raise ValueError(f"host_model_mount_path not found: {v}")
         return v
+
+    @model_validator(mode="after")
+    def _check_container_source(self) -> "SuiteConfig":
+        if self.image and self.existing_container:
+            raise ValueError("image 和 existing_container 不能同时设置，请只填其中一个")
+        if not self.image and not self.existing_container:
+            raise ValueError("必须设置 image（创建新容器）或 existing_container（连接已有容器）")
+        return self
 
     @model_validator(mode="after")
     def _check_mode_requirements(self) -> "SuiteConfig":

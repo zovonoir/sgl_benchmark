@@ -1,6 +1,6 @@
 # Qwen3.5-27B — SGLang + ATOM plugin
 # ISL=4096, OSL=2048, 并发224, 448 prompts, TP1
-image: "atom-sglang:opt1"
+image: "deliver-atom-image1"
 model_path: "/.cache/huggingface/Qwen3.5-35B-A3B-FP8"
 model_prefix: "qwen3.5_moe"
 host_model_mount_path: "/raid/models"
@@ -11,6 +11,7 @@ precision: fp8
 port: 37660
 
 container_env:
+  - "HF_HOME=/.cache/huggingface/"
   - "SGLANG_DISABLE_CUDNN_CHECK=1"
   - "SGLANG_USE_CUDA_IPC_TRANSPORT=1"
   - "SGLANG_VLM_CACHE_SIZE_MB=8192"
@@ -21,8 +22,8 @@ container_env:
   - "SGLANG_EXTERNAL_MODEL_PACKAGE=atom.plugin.sglang.models"
   - "AITER_QUICK_REDUCE_QUANTIZATION=INT4"
   - "SGLANG_AITER_FP8_PREFILL_ATTN=0"
-  - "HIP_VISIBLE_DEVICES=7"
-  - "CUDA_VISIBLE_DEVICES=7"
+  - "HIP_VISIBLE_DEVICES=0"
+  - "CUDA_VISIBLE_DEVICES=0"
 
 docker_run_args:
   shm_size: "128g"
@@ -65,7 +66,7 @@ enable_thinking: false
 eval_tasks: "gsm8k"                 # mmlu, hellaswag, arc_easy, winogrande
 eval_num_fewshot: 5
 eval_max_gen_toks: 2048
-eval_num_concurrent: 224
+eval_num_concurrent: 32
 eval_batch_size: "auto"
 
 # longform 模式专用

@@ -34,10 +34,11 @@ class BenchmarkRunner(BaseRunner):
             env = self._build_case_env(case_name, test_case)
 
             # Execute run_case.sh inside container, streaming output
+            suite_path = self.config.suite_path_in_container
             exec_id, output_stream = self.container.exec_run(
-                cmd=["bash", "/simple-suite/run_case.sh"],
+                cmd=["bash", f"{suite_path}/run_case.sh"],
                 environment=env,
-                workdir="/simple-suite",
+                workdir=suite_path,
                 stream=True,
             )
 

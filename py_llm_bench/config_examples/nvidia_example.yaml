@@ -19,6 +19,7 @@ port: 8888
 # ─── 容器环境变量 ─────────────────────────────────────────────────────────────
 # 所有环境变量统一在此配置，docker run 阶段一次性注入
 container_env:
+  - "HF_HOME=/.cache/huggingface/"
   # GPU 选择
   - "NVIDIA_VISIBLE_DEVICES=0,1"
   - "CUDA_VISIBLE_DEVICES=0,1"

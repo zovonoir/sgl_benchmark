@@ -13,6 +13,7 @@ longform_prompts:
   - "Write a detailed tutorial on building a REST API with Python Flask, including authentication and database integration."
 
 container_env:
+  - "HF_HOME=/.cache/huggingface/"
   - "SGLANG_DISABLE_CUDNN_CHECK=1"
   - "HIP_VISIBLE_DEVICES=0"
   - "CUDA_VISIBLE_DEVICES=0"

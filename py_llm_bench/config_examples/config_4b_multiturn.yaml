@@ -20,6 +20,7 @@ multiturn_turns:
 # multiturn_turns_file: "./multiturn_turns.json"
 
 container_env:
+  - "HF_HOME=/.cache/huggingface/"
   - "SGLANG_DISABLE_CUDNN_CHECK=1"
   - "HIP_VISIBLE_DEVICES=0"
   - "CUDA_VISIBLE_DEVICES=0"

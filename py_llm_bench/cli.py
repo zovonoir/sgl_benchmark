@@ -70,17 +70,26 @@ def _print_dry_run(config: SuiteConfig, run_dir: Path, script_dir: Path) -> None
     print("\n[2] Docker Container:")
     cm = ContainerManager(config, run_dir, script_dir)
     desc = cm.describe(extra_env=container_extra_env)
-    print(f"  Image: {desc['image']}")
-    print(f"  Container name: {desc['container_name']}")
 
-    if config.docker_run_args:
-        print(f"\n  Docker run args:")
-        for k, v in config.docker_run_args.items():
-            print(f"    {k}: {v}")
+    if desc["mode"] == "attach":
+        print(f"  Mode: Attach to existing container")
+        print(f"  Container: {desc['container_name']}")
+        print(f"  Suite path: {desc['suite_path']}")
+        print(f"  Env injection: via docker exec (NOT docker run)")
+        print(f"  Cleanup: container will NOT be removed after test")
+    else:
+        print(f"  Mode: Create new container")
+        print(f"  Image: {desc['image']}")
+        print(f"  Container name: {desc['container_name']}")
 
-    print(f"\n  Mounts ({len(desc['mounts'])}):")
-    for m in desc["mounts"]:
-        print(f"    {m}")
+        if config.docker_run_args:
+            print(f"\n  Docker run args:")
+            for k, v in config.docker_run_args.items():
+                print(f"    {k}: {v}")
+
+        print(f"\n  Mounts ({len(desc['mounts'])}):")
+        for m in desc["mounts"]:
+            print(f"    {m}")
 
     print(f"\n  Environment variables ({len(desc['environment'])}):")
     for k, v in sorted(desc["environment"].items()):
