@@ -1,6 +1,6 @@
 # py_llm_bench
 
-基于 Python 的 SGLang 推理测试套件，使用 YAML 配置文件驱动，覆盖性能压测、模型精度评测、长文本生成、多轮对话四大场景。基于 Docker + SGLang，可独立部署使用。
+基于 Python 的 SGLang 推理测试套件，使用 YAML 配置文件驱动，覆盖性能压测、模型精度评测、长文本生成、多轮对话、Torch Profiler 采集五大场景。基于 Docker + SGLang，可独立部署使用。
 
 ## 快速开始
 
@@ -20,7 +20,7 @@ python3 -m py_llm_bench --config py_llm_bench/config_examples/config_4b_benchmar
 python3 -m py_llm_bench --config py_llm_bench/config_examples/config_4b_benchmark.yaml
 ```
 
-### 五种运行模式
+### 六种运行模式
 
 ```bash
 # 性能压测
@@ -37,6 +37,9 @@ python3 -m py_llm_bench --config config_longform.yaml
 
 # 多轮对话记忆验证
 python3 -m py_llm_bench --config config_multiturn.yaml
+
+# Torch Profiler 采集
+python3 -m py_llm_bench --config config_profile.yaml
 ```
 
 ### CLI 参数覆盖
@@ -286,6 +289,48 @@ multiturn_turns:
 # 两者设其一即可，multiturn_turns 优先
 ```
 
+### Profiling 参数（run_mode: profile）
+
+通过在线服务模式（`sglang.bench_serving --profile`）收集 Torch Profiler trace，支持高并发场景。Server 启动时默认自动追加 `--disable-cuda-graph`（保留细粒度 kernel 和 Python call stack）和 `--skip-server-warmup`。
+
+```yaml
+run_mode: "profile"
+
+profile_configs:
+  - concurrency: 224                   # 并发数
+    isl: 4096                          # 输入长度
+    osl: 5                             # 输出长度（默认 5，保持小以控制 trace 大小）
+    # num_prompts: 224                 # 总请求数（默认等于 concurrency）
+    disable_cuda_graph: true           # 默认 true，关闭后 trace 只有 graph launch 事件
+    skip_server_warmup: true           # 默认 true
+    profile_with_stack: true           # 默认 true，收集 Python 调用栈
+
+  # 可定义多个 case，依次运行
+  # - concurrency: 64
+  #   isl: 2048
+  #   osl: 5
+  #   profile_with_stack: false        # 关闭调用栈，trace 大幅缩小（~200x）
+```
+
+**`profile_with_stack` 对 trace 大小的影响**：
+
+| 设置 | TP-0 decode trace | 说明 |
+|------|-------------------|------|
+| `true`（默认） | ~200 MB | 包含 Python 调用栈，可归因到源码 |
+| `false` | ~1 MB | 仅 kernel 和 CPU op，无 Python 归因 |
+
+建议首次分析用 `true` 获取完整归因信息；如果 trace 过大难以打开，改为 `false` 减小文件。
+
+**输出文件**（保存在 `runs/run_<timestamp>/profile_<case>/` 下）：
+
+```text
+<timestamp>-host.trace.json.gz                    # host/tokenizer 侧 trace
+<prefix>-<timestamp>-TP-0-EXTEND.trace.json.gz    # prefill/extend 阶段 trace
+<prefix>-<timestamp>-TP-0.trace.json.gz           # decode 阶段 trace
+```
+
+用 [Perfetto](https://ui.perfetto.dev/) 打开 `.trace.json.gz` 文件进行可视化分析。
+
 ### 容器环境变量（含 GPU 选择）
 
 所有容器环境变量统一通过 `container_env` 配置，在 `docker run` 阶段一次性注入。包括框架控制参数和 GPU 选择：
@@ -532,6 +577,18 @@ runs/run_<时间戳>/accuracy_multiturn_multiturn.txt  # 完整对话记录
 runs/run_<时间戳>/multiturn.log                     # 运行摘要
 runs/run_<时间戳>/_multiturn_turns.json              # 对话轮次定义
 ```
+
+### profile 模式输出
+
+```
+runs/run_<时间戳>/profile_01_conc224_isl4096_osl5_np224/
+  └── <session_id>/
+      ├── <timestamp>-host.trace.json.gz                 # host 侧 trace
+      ├── <prefix>-<timestamp>-TP-0-EXTEND.trace.json.gz # prefill 阶段 trace
+      └── <prefix>-<timestamp>-TP-0.trace.json.gz        # decode 阶段 trace
+```
+
+用 [Perfetto](https://ui.perfetto.dev/) 打开 `.trace.json.gz` 进行可视化分析。通常先看 `TP-0-EXTEND`（prefill）和 `TP-0`（decode），比较 prefill 和 decode 阶段的 kernel 分布差异。
 
 ---
 
