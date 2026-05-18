@@ -26,12 +26,22 @@ class BenchmarkRunner(BaseRunner):
             print(f">>> CONC={test_case.concurrency} ISL={test_case.isl} "
                   f"OSL={test_case.osl} NP={test_case.num_prompts}")
 
-            # Each test case gets a fresh container
-            self.container.cleanup()
-            self.container.start()
+            # Each test case gets a fresh container (create mode)
+            # or reuses the existing one (attach mode)
+            if not self.container.attach_mode:
+                self.container.cleanup()
+                self.container.start()
+            else:
+                # Attach mode: connect if not already connected
+                if self.container._container is None:
+                    self.container.start()
             self.container.run_post_start_commands()
 
             env = self._build_case_env(case_name, test_case)
+
+            # Ensure output directory exists inside container
+            output_dir = env["CASE_OUTPUT_DIR"]
+            self.container.exec_run(["mkdir", "-p", output_dir])
 
             # Execute run_case.sh inside container, streaming output
             suite_path = self.config.suite_path_in_container
@@ -53,6 +63,10 @@ class BenchmarkRunner(BaseRunner):
             if exit_code != 0:
                 print(f"\n>>> Warning: Case {case_name} exited with code {exit_code} "
                       "(may be caused by server cleanup)")
+
+            # In attach mode, copy results from container to host run_dir
+            if self.container.attach_mode:
+                self._copy_results_from_container(case_name)
 
             self.container.cleanup()
 
@@ -86,6 +100,22 @@ class BenchmarkRunner(BaseRunner):
                 print(f"    Tool: python3 benchmark_serving.py --backend vllm")
                 print(f"    Endpoint: /v1/completions (OpenAI compat)")
 
+    def _copy_results_from_container(self, case_name: str) -> None:
+        """Copy benchmark results from container to host run_dir (attach mode only)."""
+        import subprocess
+        container_path = f"/simple-suite-output/{case_name}"
+        host_path = str(self.run_dir / case_name)
+        try:
+            subprocess.run(
+                ["docker", "cp",
+                 f"{self.container.container_name}:{container_path}/.",
+                 host_path],
+                check=True, capture_output=True,
+            )
+            print(f">>> Copied results from container to {host_path}")
+        except subprocess.CalledProcessError as e:
+            print(f">>> Warning: Failed to copy results from container: {e.stderr.decode()}")
+
     def _build_case_name(self, case_id: str, tc: TestCaseConfig) -> str:
         return (f"case_{case_id}_conc{tc.concurrency}_isl{tc.isl}"
                 f"_osl{tc.osl}_np{tc.num_prompts}")
@@ -97,7 +127,7 @@ class BenchmarkRunner(BaseRunner):
             "CASE_OUTPUT_DIR": f"/simple-suite-output/{case_name}",
             "MODEL_PATH": self.config.model_path,
             "MODEL_PREFIX": self.config.model_prefix,
-            "IMAGE": self.config.image,
+            "IMAGE": self.config.image or self.config.existing_container or "",
             "PRECISION": self.config.precision,
             "RUNNER_TYPE": self.config.runner_type,
             "FRAMEWORK": self.config.framework,
