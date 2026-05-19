@@ -313,11 +313,14 @@ class ContainerManager:
         print(f">>> Running {len(self.config.post_start_commands)} post-start command(s)...")
         for cmd in self.config.post_start_commands:
             print(f"    $ {cmd}")
-            exit_code, output = self.exec_run(["bash", "-c", cmd])
-            if output:
-                text = output.decode("utf-8", errors="replace").strip()
-                if text:
-                    print(f"    {text}")
+            exec_id, output_stream = self.exec_run(
+                ["bash", "-c", cmd], stream=True,
+            )
+            for chunk in output_stream:
+                sys.stdout.buffer.write(chunk)
+                sys.stdout.buffer.flush()
+            exit_info = self._client.api.exec_inspect(exec_id)
+            exit_code = exit_info.get("ExitCode", -1)
             if exit_code != 0:
                 raise ContainerError(f"Post-start command failed (exit {exit_code}): {cmd}")
 
