@@ -195,6 +195,22 @@ run_mode: "benchmark"
 # 注意：两个后端的 TPOT 有约 1.5-2ms 系统性差异，不可跨后端比较
 bench_backend: "sglang"  # 默认值: vllm
 
+# 压测数据集类型
+#   random:      随机 token prompt，使用 test_configs 中的 ISL/OSL
+#   custom-text: 使用人工构造的 UTF-8 文本文件作为 prompt（适合复现客户长文本）
+# 注意：custom-text 目前用于 bench_backend=vllm，即 /v1/completions 路径
+benchmark_dataset_name: "random"  # 默认值: random
+
+# custom-text 数据集参数（benchmark_dataset_name: custom-text 时使用）
+benchmark_prompt_file: "/path/to/prompt.txt"  # 文本文件路径，host 侧路径
+benchmark_prompt_repeat: 120                  # 文本内容重复次数，默认 1
+benchmark_prompt_suffix: "\n\n请总结上述材料。" # 追加到 prompt 末尾的文本，默认空字符串
+
+# vllm/OpenAI benchmark 请求参数
+benchmark_ignore_eos: true       # 默认 true；false 时不向请求体传 ignore_eos
+benchmark_temperature: null      # 默认 null；设置后覆盖请求体 temperature
+benchmark_extra_request_body: {} # 默认空；会 merge 到每个请求体中，覆盖默认字段
+
 # 输入/输出长度随机波动比例
 #   1.0 = 固定长度（精确 ISL/OSL）
 #   0.8 = 在 [ISL*0.8, ISL] 范围内随机
@@ -223,6 +239,36 @@ test_configs:
 
   # 可以定义多个 case，会依次运行
 ```
+
+#### 使用人工长文本 prompt 复现问题
+
+`custom-text` 数据集会读取一个 UTF-8 文本文件，按 `benchmark_prompt_repeat` 重复后再拼接 `benchmark_prompt_suffix`，并将该 prompt 发送给 benchmark 后端。它适合复现“随机 prompt 不触发、特定自然长文本触发”的问题。
+
+示例：
+
+```yaml
+run_mode: benchmark
+bench_backend: vllm                  # 走 /v1/completions
+benchmark_dataset_name: custom-text
+benchmark_prompt_file: "/raid/users/me/repro_prompt.txt"
+benchmark_prompt_repeat: 120
+benchmark_prompt_suffix: "\n\n请用 5 句话总结上述材料的核心观点。"
+benchmark_ignore_eos: false
+benchmark_temperature: 0.7
+
+test_configs:
+  - concurrency: 1
+    isl: 40960       # custom-text 下仅用于 case 命名和结果汇总
+    osl: 256         # 作为 custom-text 的输出 token 数
+    num_prompts: 1
+```
+
+说明：
+
+- `benchmark_prompt_file` 是 host 侧路径；框架会在运行每个 case 前复制到容器的 case 输出目录。
+- `isl` 不会裁剪 custom prompt；实际输入 token 数由文本文件、repeat 和 suffix 决定，并会在日志中打印。
+- `osl` 会传给 `--custom-text-output-len`，即每个请求的输出 token 数。
+- 如果要回到原来的随机 prompt 模式，删除或注释掉 `benchmark_dataset_name/custom-text` 相关字段即可；默认会恢复 `random`。
 
 ### Chat 参数（run_mode: chat）
 
