@@ -16,3 +16,5 @@ __pycache__/
 .claude
 
 tmp_configs
+
+customer_logs

@@ -4,6 +4,8 @@ Orchestrates container lifecycle and invokes run_case.sh inside the container
 for each test case, then generates a summary report.
 """
 
+import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -43,6 +45,7 @@ class BenchmarkRunner(BaseRunner):
             # (prevents stale results from previous runs being picked up)
             output_dir = env["CASE_OUTPUT_DIR"]
             self.container.exec_run(["bash", "-c", f"rm -rf {output_dir} && mkdir -p {output_dir}"])
+            self._prepare_custom_prompt_file(env)
 
             # Execute run_case.sh inside container, streaming output
             suite_path = self.config.suite_path_in_container
@@ -80,6 +83,10 @@ class BenchmarkRunner(BaseRunner):
     def dry_run(self) -> None:
         print(f"\n--- Benchmark Plan ---")
         print(f"Backend: {self.config.bench_backend}")
+        print(f"Dataset: {self.config.benchmark_dataset_name}")
+        if self.config.benchmark_prompt_file:
+            print(f"Prompt file: {self.config.benchmark_prompt_file}")
+            print(f"Prompt repeat: {self.config.benchmark_prompt_repeat}")
         print(f"Random range ratio: {self.config.random_range_ratio}")
         print(f"Request rate: {self.config.request_rate}")
         print(f"Burstiness: {self.config.burstiness}")
@@ -145,6 +152,22 @@ class BenchmarkRunner(BaseRunner):
                 part for arg in self.config.server_args for part in arg.split()
             ),
             "BENCH_BACKEND": self.config.bench_backend,
+            "BENCHMARK_DATASET_NAME": self.config.benchmark_dataset_name,
+            "BENCHMARK_PROMPT_REPEAT": str(self.config.benchmark_prompt_repeat),
+            "BENCHMARK_PROMPT_SUFFIX": self.config.benchmark_prompt_suffix,
+            "BENCHMARK_IGNORE_EOS": str(self.config.benchmark_ignore_eos).lower(),
+            "BENCHMARK_TEMPERATURE": (
+                "" if self.config.benchmark_temperature is None
+                else str(self.config.benchmark_temperature)
+            ),
+            "BENCHMARK_EXTRA_REQUEST_BODY": (
+                json.dumps(
+                    self.config.benchmark_extra_request_body,
+                    ensure_ascii=False,
+                )
+                if self.config.benchmark_extra_request_body
+                else ""
+            ),
             "WATCHDOG_TIMEOUT": str(self.config.watchdog_timeout),
         }
 
@@ -152,3 +175,27 @@ class BenchmarkRunner(BaseRunner):
         # only pass run_case.sh specific vars here
 
         return env
+
+    def _prepare_custom_prompt_file(self, env: dict) -> None:
+        """Copy a configured custom prompt file into the container case directory."""
+        if self.config.benchmark_dataset_name != "custom-text":
+            return
+
+        assert self.config.benchmark_prompt_file is not None
+        prompt_path = Path(self.config.benchmark_prompt_file).expanduser()
+        if not prompt_path.is_absolute():
+            prompt_path = Path.cwd() / prompt_path
+        if not prompt_path.is_file():
+            raise FileNotFoundError(f"benchmark_prompt_file not found: {prompt_path}")
+
+        container_path = f"{env['CASE_OUTPUT_DIR']}/custom_prompt.txt"
+        subprocess.run(
+            [
+                "docker",
+                "cp",
+                str(prompt_path),
+                f"{self.container.container_name}:{container_path}",
+            ],
+            check=True,
+        )
+        env["BENCHMARK_PROMPT_FILE"] = container_path

@@ -169,6 +169,29 @@ def sample_random_requests(
     return input_requests
 
 
+def sample_custom_text_requests(
+    prompt_file: str,
+    output_len: int,
+    num_prompts: int,
+    tokenizer: PreTrainedTokenizerBase,
+    repeat: int = 1,
+    suffix: str = "",
+) -> List[Tuple[str, int, int, None]]:
+    if not prompt_file:
+        raise ValueError("--custom-text-file is required for custom-text dataset")
+    if repeat < 1:
+        raise ValueError("--custom-text-repeat must be >= 1")
+    with open(prompt_file, encoding="utf-8") as f:
+        base_prompt = f.read()
+    prompt = base_prompt * repeat + suffix
+    prompt_len = len(tokenizer.encode(prompt, add_special_tokens=False))
+    print(
+        f"custom_text prompt_file={prompt_file} repeat={repeat} "
+        f"chars={len(prompt)} tokens={prompt_len} output_len={output_len}"
+    )
+    return [(prompt, prompt_len, output_len, None) for _ in range(num_prompts)]
+
+
 async def get_request(
     input_requests: List[Tuple[str, int, int]],
     request_rate: float,
@@ -339,6 +362,7 @@ async def benchmark(
     selected_percentile_metrics: List[str],
     selected_percentiles: List[str],
     ignore_eos: bool,
+    extra_request_body: Optional[dict],
     goodput_config_dict: Dict[str, float],
     max_concurrency: Optional[int],
     lora_modules: Optional[List[str]],
@@ -366,6 +390,7 @@ async def benchmark(
         best_of=best_of,
         multi_modal_content=test_mm_content,
         ignore_eos=ignore_eos,
+        extra_body=extra_request_body,
     )
 
     if num_warmups > 0:
@@ -455,7 +480,8 @@ async def benchmark(
                                               logprobs=logprobs,
                                               best_of=best_of,
                                               multi_modal_content=mm_content,
-                                              ignore_eos=ignore_eos)
+                                              ignore_eos=ignore_eos,
+                                              extra_body=extra_request_body)
         tasks.append(
             asyncio.create_task(
                 limited_request_func(request_func_input=request_func_input,
@@ -664,10 +690,24 @@ def main(args: argparse.Namespace):
             tokenizer=tokenizer,
             use_chat_template=args.use_chat_template,
         )
-
+    elif args.dataset_name == "custom-text":
+        input_requests = sample_custom_text_requests(
+            prompt_file=args.custom_text_file,
+            output_len=args.custom_text_output_len,
+            num_prompts=args.num_prompts,
+            tokenizer=tokenizer,
+            repeat=args.custom_text_repeat,
+            suffix=args.custom_text_suffix,
+        )
     else:
         raise ValueError(f"Unknown dataset: {args.dataset_name}")
 
+    extra_request_body = (
+        json.loads(args.extra_request_body) if args.extra_request_body else None
+    )
+    if args.temperature is not None:
+        extra_request_body = dict(extra_request_body or {})
+        extra_request_body["temperature"] = args.temperature
     goodput_config_dict = check_goodput_args(args)
 
     # Avoid GC processing "static" data - reduce pause times.
@@ -695,6 +735,7 @@ def main(args: argparse.Namespace):
                 float(p) for p in args.metric_percentiles.split(",")
             ],
             ignore_eos=args.ignore_eos,
+            extra_request_body=extra_request_body,
             goodput_config_dict=goodput_config_dict,
             max_concurrency=args.max_concurrency,
             lora_modules=args.lora_modules,
@@ -790,7 +831,7 @@ if __name__ == "__main__":
         "--dataset-name",
         type=str,
         default="sharegpt",
-        choices=["random"],
+        choices=["random", "custom-text"],
         help="Name of the dataset to benchmark on.",
     )
     parser.add_argument("--dataset-path",
@@ -928,6 +969,18 @@ if __name__ == "__main__":
         help="Set ignore_eos flag when sending the benchmark request."
         "Warning: ignore_eos is not supported in deepspeed_mii and tgi.")
     parser.add_argument(
+        "--extra-request-body",
+        type=str,
+        default=None,
+        help="JSON object merged into each request body, overriding defaults.",
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=None,
+        help="Override request temperature.",
+    )
+    parser.add_argument(
         "--percentile-metrics",
         type=str,
         default="ttft,tpot,itl",
@@ -1022,6 +1075,32 @@ if __name__ == "__main__":
         "--use-chat-template",
         action="store_true",
         help="Use chat template to format the prompt.",
+    )
+
+    custom_text_group = parser.add_argument_group("custom text dataset options")
+    custom_text_group.add_argument(
+        "--custom-text-file",
+        type=str,
+        default="",
+        help="Path to a UTF-8 text file used as the benchmark prompt.",
+    )
+    custom_text_group.add_argument(
+        "--custom-text-output-len",
+        type=int,
+        default=128,
+        help="Number of output tokens for each custom-text request.",
+    )
+    custom_text_group.add_argument(
+        "--custom-text-repeat",
+        type=int,
+        default=1,
+        help="Repeat the custom text file contents this many times.",
+    )
+    custom_text_group.add_argument(
+        "--custom-text-suffix",
+        type=str,
+        default="",
+        help="Suffix appended after the repeated custom text.",
     )
 
     hf_group = parser.add_argument_group("hf dataset options")

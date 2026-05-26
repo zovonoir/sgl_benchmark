@@ -31,6 +31,13 @@ DISAGG="${DISAGG:-false}"
 DP_ATTENTION="${DP_ATTENTION:-false}"
 PORT="${PORT:-8888}"
 BENCH_BACKEND="${BENCH_BACKEND:-vllm}"
+BENCHMARK_DATASET_NAME="${BENCHMARK_DATASET_NAME:-random}"
+BENCHMARK_PROMPT_FILE="${BENCHMARK_PROMPT_FILE:-}"
+BENCHMARK_PROMPT_REPEAT="${BENCHMARK_PROMPT_REPEAT:-1}"
+BENCHMARK_PROMPT_SUFFIX="${BENCHMARK_PROMPT_SUFFIX:-}"
+BENCHMARK_IGNORE_EOS="${BENCHMARK_IGNORE_EOS:-true}"
+BENCHMARK_TEMPERATURE="${BENCHMARK_TEMPERATURE:-}"
+BENCHMARK_EXTRA_REQUEST_BODY="${BENCHMARK_EXTRA_REQUEST_BODY:-}"
 
 CONC="${CONC:?CONC is required}"
 ISL="${ISL:?ISL is required}"
@@ -164,6 +171,14 @@ echo "[case] CONC=$CONC ISL=$ISL OSL=$OSL NUM_PROMPTS=$NUM_PROMPTS"
 echo "[case] REQUEST_RATE=$REQUEST_RATE BURSTINESS=$BURSTINESS"
 echo "[case] USER_SERVER_ARGS: ${USER_SERVER_ARGS[*]:-<none>}"
 echo "[case] RESULT_FILENAME=$RESULT_FILENAME"
+echo "[case] BENCHMARK_DATASET_NAME=$BENCHMARK_DATASET_NAME"
+echo "[case] BENCHMARK_IGNORE_EOS=$BENCHMARK_IGNORE_EOS"
+echo "[case] BENCHMARK_TEMPERATURE=${BENCHMARK_TEMPERATURE:-<default>}"
+echo "[case] BENCHMARK_EXTRA_REQUEST_BODY=$BENCHMARK_EXTRA_REQUEST_BODY"
+if [[ "$BENCHMARK_DATASET_NAME" == "custom-text" ]]; then
+  echo "[case] BENCHMARK_PROMPT_FILE=$BENCHMARK_PROMPT_FILE"
+  echo "[case] BENCHMARK_PROMPT_REPEAT=$BENCHMARK_PROMPT_REPEAT"
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 启动 server
@@ -209,6 +224,10 @@ wait_for_server_ready "$SERVER_PID" "$SERVER_LOG"
 echo "[case] BENCH_BACKEND=$BENCH_BACKEND"
 
 if [[ "$BENCH_BACKEND" == "sglang" ]]; then
+  if [[ "$BENCHMARK_DATASET_NAME" != "random" ]]; then
+    echo "[case] ERROR: BENCH_BACKEND=sglang currently supports only BENCHMARK_DATASET_NAME=random in this wrapper." >&2
+    exit 2
+  fi
   # SGLang 原生 bench_serving（走 /generate 原生接口）
   BENCH_CMD=(
     python3 -m sglang.bench_serving
@@ -232,21 +251,43 @@ else
     --model "$MODEL_PATH"
     --backend vllm
     --base-url "http://0.0.0.0:${PORT}"
-    --dataset-name random
-    --random-input-len "$ISL"
-    --random-output-len "$OSL"
-    --random-range-ratio "$RANDOM_RANGE_RATIO"
+    --dataset-name "$BENCHMARK_DATASET_NAME"
     --num-prompts "$NUM_PROMPTS"
     --max-concurrency "$CONC"
     --request-rate "$REQUEST_RATE"
     --burstiness "$BURSTINESS"
-    --ignore-eos
     --save-result
     --num-warmups 2
     --percentile-metrics ttft,tpot,itl,e2el
     --result-dir "$CASE_OUTPUT_DIR"
     --result-filename "${RESULT_FILENAME}.json"
   )
+  if [[ "$BENCHMARK_IGNORE_EOS" == "true" || "$BENCHMARK_IGNORE_EOS" == "1" ]]; then
+    BENCH_CMD+=(--ignore-eos)
+  fi
+  if [[ -n "$BENCHMARK_EXTRA_REQUEST_BODY" && "$BENCHMARK_EXTRA_REQUEST_BODY" != "{}" ]]; then
+    BENCH_CMD+=(--extra-request-body "$BENCHMARK_EXTRA_REQUEST_BODY")
+  fi
+  if [[ -n "$BENCHMARK_TEMPERATURE" ]]; then
+    BENCH_CMD+=(--temperature "$BENCHMARK_TEMPERATURE")
+  fi
+  if [[ "$BENCHMARK_DATASET_NAME" == "random" ]]; then
+    BENCH_CMD+=(
+      --random-input-len "$ISL"
+      --random-output-len "$OSL"
+      --random-range-ratio "$RANDOM_RANGE_RATIO"
+    )
+  elif [[ "$BENCHMARK_DATASET_NAME" == "custom-text" ]]; then
+    BENCH_CMD+=(
+      --custom-text-file "$BENCHMARK_PROMPT_FILE"
+      --custom-text-output-len "$OSL"
+      --custom-text-repeat "$BENCHMARK_PROMPT_REPEAT"
+      --custom-text-suffix "$BENCHMARK_PROMPT_SUFFIX"
+    )
+  else
+    echo "[case] ERROR: unknown BENCHMARK_DATASET_NAME=$BENCHMARK_DATASET_NAME" >&2
+    exit 2
+  fi
 fi
 
 "${BENCH_CMD[@]}" || true

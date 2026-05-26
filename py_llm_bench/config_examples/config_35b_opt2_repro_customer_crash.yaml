@@ -1,0 +1,99 @@
+# 复现客户 alimama-aigc-service 崩溃 BUG
+# 客户原模型: Qwen3_5-397B-A17B-FP8 (TP=4)，本机用 Qwen3.5-35B-A3B-FP8 替代（同 MoE 架构 + FP8）
+# 关键复现条件:
+#   1. 保留 radix cache（不加 --disable-radix-cache）
+#   2. attention-backend=aiter + SGLANG_AITER_FP8_PREFILL_ATTN=0（decode 仍用 aiter fp8）
+#   3. 长上下文（ISL 4K -> 8K -> 16K -> 32K 阶梯，逼近客户的 54K cached + decode）
+#   4. SGLANG_EXTERNAL_MODEL_PACKAGE=atom.plugin.sglang.models（ATOM 插件接管 Qwen MoE）
+#   5. chunked-prefill-size=2048（与客户一致，制造大量小 chunk 拼接）
+#   6. max-running-requests=256，mem-fraction-static=0.85
+
+image: "atom-sglang:opt2"
+model_path: "/.cache/huggingface/Qwen3.5-35B-A3B-FP8"
+model_prefix: "qwen3.5_moe_repro"
+host_model_mount_path: "/raid/models"
+
+run_mode: benchmark
+bench_backend: sglang
+precision: fp8
+port: 37661
+
+# 长上下文 + decode 容易把 watchdog 触发，给足够时间
+health_timeout: 480
+watchdog_timeout: 3600
+
+container_env:
+  # ATOM 插件接管 Qwen3.5 MoE
+  - "SGLANG_EXTERNAL_MODEL_PACKAGE=atom.plugin.sglang.models"
+  # 与客户完全一致的 SGLang/ATOM 控制变量
+  - "HF_HOME=/.cache/huggingface/"
+  - "SGLANG_DISABLE_CUDNN_CHECK=1"
+  - "SGLANG_USE_AITER=1"
+  - "SGLANG_ROCM_USE_AITER_LINEAR_SHUFFLE=1"
+  # 客户原始变量是 SGLANG_ROCM_USE_ALTER_LINEAR_FP8HIPB（疑似拼写错误，保留原样以完全复刻）
+  - "SGLANG_ROCM_USE_ALTER_LINEAR_FP8HIPB=1"
+  - "SGLANG_USE_AITER_NEW_CA=false"
+  - "SGLANG_AITER_FP8_PREFILL_ATTN=0"
+  - "SGLANG_HEALTH_CHECK_TIMEOUT=600"
+  - "SGLANG_WARMUP_TIMEOUT=1800"
+  # TP=4，使用 GPU 4,5,6,7（其他卡禁止使用）
+  - "HIP_VISIBLE_DEVICES=4,5,6,7"
+  - "CUDA_VISIBLE_DEVICES=4,5,6,7"
+
+docker_run_args:
+  shm_size: "128g"
+  cap_add: ["SYS_PTRACE"]
+  security_opt: ["seccomp=unconfined"]
+  user: "root"
+  devices: ["/dev/kfd", "/dev/dri"]
+  group_add: ["video"]
+  ipc_mode: "host"
+  pid_mode: "host"
+  network_mode: "host"
+  privileged: true
+  ulimits:
+    core:
+      soft: 0
+      hard: 0
+
+# 与客户启动指令对齐，关键: **不加** --disable-radix-cache，保留 radix cache 行为
+server_args:
+  - "--tensor-parallel-size 4"
+  - "--attention-backend aiter"
+  - "--reasoning-parser qwen3"
+  - "--trust-remote-code"
+  - "--chunked-prefill-size 2048"
+  - "--mem-fraction-static 0.85"
+  - "--max-running-requests 256"
+  - "--enable-metrics"
+  - "--collect-tokens-histogram"
+
+# 长上下文阶梯，逼近客户 54K 的 cached + decode 场景
+# 固定长度（random_range_ratio=1.0）+ 适度并发，让单请求 seq_len 真的能达到目标
+random_range_ratio: 1.0
+request_rate: "inf"
+
+test_configs:
+  # case 1: 8K 上下文，warmup + baseline
+  - concurrency: 8
+    isl: 8192
+    osl: 1024
+    num_prompts: 16
+
+  # case 2: 16K 上下文，开始进入长上下文 decode
+  - concurrency: 8
+    isl: 16384
+    osl: 1024
+    num_prompts: 16
+
+  # case 3: 32K 上下文 + 短 decode，接近客户 54K 的 seq_len 量级
+  - concurrency: 4
+    isl: 32768
+    osl: 512
+    num_prompts: 8
+
+  # case 4: 32K 上下文 + 较长 decode，让 decode 阶段 seq_len 不断增长
+  - concurrency: 4
+    isl: 32768
+    osl: 2048
+    num_prompts: 8

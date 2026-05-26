@@ -56,6 +56,13 @@ class SuiteConfig(BaseModel):
     framework: str = "sglang"
     port: int = 8888
     bench_backend: Literal["vllm", "sglang"] = "vllm"
+    benchmark_dataset_name: Literal["random", "custom-text"] = "random"
+    benchmark_prompt_file: str | None = None
+    benchmark_prompt_repeat: int = 1
+    benchmark_prompt_suffix: str = ""
+    benchmark_ignore_eos: bool = True
+    benchmark_temperature: float | None = None
+    benchmark_extra_request_body: dict = Field(default_factory=dict)
     random_range_ratio: float = 1.0
     request_rate: str = "inf"
     burstiness: float = 1.0
@@ -103,6 +110,13 @@ class SuiteConfig(BaseModel):
     def _check_mode_requirements(self) -> "SuiteConfig":
         if self.run_mode == "benchmark" and not self.test_configs:
             raise ValueError("test_configs is required for benchmark mode")
+        if self.run_mode == "benchmark" and self.benchmark_dataset_name == "custom-text":
+            if not self.benchmark_prompt_file:
+                raise ValueError(
+                    "benchmark_prompt_file is required when benchmark_dataset_name=custom-text"
+                )
+            if self.benchmark_prompt_repeat < 1:
+                raise ValueError("benchmark_prompt_repeat must be >= 1")
         if self.run_mode == "longform" and not self.longform_prompts:
             raise ValueError("longform_prompts is required for longform mode")
         if self.run_mode == "multiturn" and not self.multiturn_turns and not self.multiturn_turns_file:
@@ -120,6 +134,12 @@ _ENV_OVERRIDE_MAP = {
     "FRAMEWORK": "framework",
     "PORT": "port",
     "BENCH_BACKEND": "bench_backend",
+    "BENCHMARK_DATASET_NAME": "benchmark_dataset_name",
+    "BENCHMARK_PROMPT_FILE": "benchmark_prompt_file",
+    "BENCHMARK_PROMPT_REPEAT": "benchmark_prompt_repeat",
+    "BENCHMARK_PROMPT_SUFFIX": "benchmark_prompt_suffix",
+    "BENCHMARK_IGNORE_EOS": "benchmark_ignore_eos",
+    "BENCHMARK_TEMPERATURE": "benchmark_temperature",
     "RANDOM_RANGE_RATIO": "random_range_ratio",
     "REQUEST_RATE": "request_rate",
     "BURSTINESS": "burstiness",
