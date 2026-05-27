@@ -18,3 +18,8 @@ __pycache__/
 tmp_configs
 
 customer_logs
+
+*.log
+probe_long_context.py
+gen_customer_repro_configs.py
+repro_customer_crash.sh

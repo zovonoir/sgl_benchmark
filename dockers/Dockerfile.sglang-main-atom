@@ -1,0 +1,234 @@
+# syntax=docker/dockerfile:1.7
+FROM rocm/atom-dev:latest
+
+ARG SGLANG_REPO="https://github.com/sgl-project/sglang.git"
+ARG SGLANG_REF="main"
+ARG SGL_KERNEL_AMDGPU_TARGET="gfx942"
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV ROCM_PATH=/opt/rocm
+ENV PATH=/root/.cargo/bin:/opt/venv/bin:/opt/rocm/llvm/bin:${PATH}
+ENV LD_LIBRARY_PATH=/opt/rocm/lib:/usr/local/lib:${LD_LIBRARY_PATH}
+
+WORKDIR /app
+
+# Fail early if the base image is not the expected ROCm/PyTorch environment.
+RUN python3 - <<'PY'
+import torch
+
+print("torch:", torch.__version__)
+print("torch.version.hip:", getattr(torch.version, "hip", None))
+print("torch.version.cuda:", getattr(torch.version, "cuda", None))
+if getattr(torch.version, "hip", None) is None:
+    raise SystemExit("Expected ROCm PyTorch in rocm/atom-dev:latest")
+if getattr(torch.version, "cuda", None) is not None:
+    raise SystemExit("Unexpected CUDA PyTorch in ROCm image")
+PY
+
+# Build tools needed by SGLang's Python package metadata and Rust gRPC extension.
+# Use rustup instead of apt because ROCm base images often have tightly pinned apt packages.
+RUN set -eux; \
+    python3 -m pip install --no-cache-dir --upgrade pip; \
+    python3 -m pip install --no-cache-dir \
+        "setuptools>=61.0" \
+        "setuptools-scm>=8.0" \
+        "setuptools-rust>=1.10" \
+        wheel \
+        packaging \
+        grpcio-tools; \
+    if ! command -v cargo >/dev/null 2>&1; then \
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal; \
+    fi; \
+    mkdir -p /usr/local/bin; \
+    printf '%s\n' '#!/bin/sh' 'exec python3 -m grpc_tools.protoc "$@"' > /usr/local/bin/protoc; \
+    chmod +x /usr/local/bin/protoc; \
+    protoc --version; \
+    cargo --version; \
+    rustc --version
+
+RUN set -eux; \
+    rm -rf /app/sglang; \
+    git clone "${SGLANG_REPO}" /app/sglang; \
+    cd /app/sglang; \
+    git checkout "${SGLANG_REF}"; \
+    git rev-parse --short HEAD
+
+# SGLang main imports sgl_kernel.kvcacheio from the ROCm kernel extension.
+# Build it from the checked-out source instead of installing the CUDA wheel.
+RUN set -eux; \
+    cd /app/sglang/sgl-kernel; \
+    AMDGPU_TARGET="${SGL_KERNEL_AMDGPU_TARGET}" python3 setup_rocm.py install; \
+    python3 - <<'PY'
+import sgl_kernel
+import sgl_kernel.kvcacheio
+
+print("sgl_kernel:", sgl_kernel.__file__)
+print("sgl_kernel.kvcacheio ok")
+PY
+
+# Install SGLang runtime dependencies without letting pip resolve CUDA or PyTorch packages.
+# The main branch currently declares CUDA packages and a fixed torch version by default;
+# resolving those in a ROCm image can replace the preinstalled ROCm torch stack.
+RUN python3 - <<'PY'
+from pathlib import Path
+import tomllib
+from packaging.markers import default_environment
+from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name
+
+pyproject = Path("/app/sglang/python/pyproject.toml")
+data = tomllib.loads(pyproject.read_text())
+env = default_environment()
+
+blocked_exact = {
+    "torch",
+    "torchvision",
+    "torchaudio",
+    "torchcodec",
+    "torchao",
+    "torch-memory-saver",
+    "triton",
+    "cuda-python",
+    "flashinfer-python",
+    "flashinfer-cubin",
+    "nvidia-cutlass-dsl",
+    "nvidia-ml-py",
+    "flash-attn-4",
+    "sgl-deep-gemm",
+    "sglang-kernel",
+    "tilelang",
+    "tokenspeed-mla",
+    "quack-kernels",
+    "kernels",
+    "bitsandbytes",
+}
+blocked_prefixes = ("nvidia-",)
+
+safe = []
+skipped = []
+seen = set()
+
+for dep in data["project"]["dependencies"]:
+    req = Requirement(dep)
+    name = canonicalize_name(req.name)
+    if req.marker is not None and not req.marker.evaluate(env):
+        skipped.append((dep, "marker"))
+        continue
+    if name in blocked_exact or any(name.startswith(prefix) for prefix in blocked_prefixes):
+        skipped.append((dep, "blocked"))
+        continue
+    if dep not in seen:
+        safe.append(dep)
+        seen.add(dep)
+
+Path("/tmp/sglang-safe-top-level.txt").write_text("\n".join(safe) + "\n")
+Path("/tmp/sglang-skipped-deps.txt").write_text(
+    "\n".join(f"{why}: {dep}" for dep, why in skipped) + "\n"
+)
+
+print("Safe top-level requirements:")
+print(Path("/tmp/sglang-safe-top-level.txt").read_text())
+print("Skipped requirements:")
+print(Path("/tmp/sglang-skipped-deps.txt").read_text())
+PY
+
+RUN set -eux; \
+    python3 -m pip install --no-cache-dir --no-deps -r /tmp/sglang-safe-top-level.txt; \
+    python3 -m pip install --no-cache-dir --no-deps \
+        airportsdata \
+        cffi \
+        cloudpickle \
+        asttokens \
+        decorator \
+        diskcache \
+        docstring-parser \
+        executing \
+        grpcio-health-checking \
+        grpcio-reflection \
+        amdsmi \
+        ipython-pygments-lexers \
+        jedi \
+        jiter \
+        jsonschema \
+        jsonschema-specifications \
+        lark \
+        loguru \
+        matplotlib-inline \
+        nest_asyncio \
+        outlines_core \
+        parso \
+        pexpect \
+        prompt_toolkit \
+        ptyprocess \
+        pure-eval \
+        pycountry \
+        pycparser \
+        pygments \
+        pydantic-extra-types \
+        pycryptodomex \
+        referencing \
+        rpds-py \
+        sniffio \
+        smg-grpc-proto \
+        stack_data \
+        traitlets \
+        wcwidth
+
+# Editable source install. --no-deps and --no-build-isolation are intentional:
+# they prevent pip from downloading CUDA wheels or replacing ROCm PyTorch.
+RUN set -eux; \
+    cd /app/sglang/python; \
+    python3 -m pip install --no-cache-dir --no-deps --no-build-isolation -e .
+
+RUN python3 - <<'PY'
+import importlib.metadata as md
+import torch
+import sglang
+
+for name in [
+    "sglang",
+    "torch",
+    "torchaudio",
+    "torchvision",
+    "triton",
+    "amdsmi",
+    "sglang-kernel",
+    "cuda-python",
+    "flashinfer-python",
+    "flashinfer_cubin",
+    "nvidia-cutlass-dsl",
+]:
+    try:
+        print(f"{name}=={md.version(name)}")
+    except md.PackageNotFoundError:
+        print(f"{name}: not installed")
+
+assert getattr(torch.version, "hip", None) is not None
+assert getattr(torch.version, "cuda", None) is None
+for forbidden in [
+    "cuda-python",
+    "flashinfer-python",
+    "flashinfer_cubin",
+    "nvidia-cutlass-dsl",
+]:
+    try:
+        md.version(forbidden)
+    except md.PackageNotFoundError:
+        continue
+    raise SystemExit(f"Forbidden CUDA dependency installed: {forbidden}")
+
+print("sglang module:", sglang.__file__)
+PY
+
+RUN python3 - <<'PY'
+import amdsmi
+
+print("amdsmi module:", amdsmi.__file__)
+PY
+
+# Do not run `sglang serve --help` at build time: current SGLang main imports
+# multimodal code that queries GPU properties, and docker build has no GPU.
+RUN sglang --help >/tmp/sglang-help.txt
+
+WORKDIR /app/sglang
+CMD ["/bin/bash"]
