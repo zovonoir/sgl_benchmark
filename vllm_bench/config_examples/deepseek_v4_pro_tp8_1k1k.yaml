@@ -1,0 +1,45 @@
+# DeepSeek-V4-Pro vLLM TP8 1K/1K throughput reproduction.
+# Requires an already-running container with vLLM installed and 8 visible GPUs.
+existing_container: "jjjjjdsv4"
+model_path: "deepseek-ai/DeepSeek-V4-Pro"
+model_prefix: "deepseek_v4_pro"
+host_model_mount_path: "/home/sabre/model"
+
+precision: "fp4"
+runner_type: "mi355x"
+framework: "vllm"
+port: 8001
+health_timeout: 1800
+
+container_env:
+  - "HF_HUB_CACHE=/.cache/huggingface"
+  - "VLLM_ROCM_USE_AITER=1"
+  - "CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7"
+
+server_args:
+  - "--host localhost"
+  - "--dtype auto"
+  - "--tensor-parallel-size 8"
+  - "--max-model-len 2304"
+  - "--max-num-seqs 256"
+  - "--distributed-executor-backend mp"
+  - "--trust-remote-code"
+  - "--gpu-memory-utilization 0.6"
+  - "--moe-backend aiter"
+  - "--tokenizer-mode deepseek_v4"
+  - "--reasoning-parser deepseek_v4"
+  - "--kv-cache-dtype fp8_e4m3"
+  - "--compilation-config '{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\"}'"
+
+random_range_ratio: 0.8
+request_rate: "inf"
+burstiness: 1.0
+num_warmups: 128
+benchmark_ignore_eos: true
+
+test_configs:
+  - concurrency: 64
+    isl: 1024
+    osl: 1024
+    num_prompts: 640
+
