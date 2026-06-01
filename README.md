@@ -2,14 +2,7 @@
 
 配置驱动的 SGLang 推理测试套件，覆盖性能压测、模型精度评测、长文本生成、多轮对话验证、Torch Profiler 采集五大场景。基于 Docker + SGLang，可独立部署到任意机器使用。
 
-提供两个版本：
-
-| 版本 | 目录 | 配置格式 | 详细文档 |
-|------|------|---------|---------|
-| **Python 版本（推荐）** | [`py_llm_bench/`](py_llm_bench/) | YAML | [py_llm_bench/README.md](py_llm_bench/README.md) |
-| Bash 版本 | [`bash_version/`](bash_version/) | Shell 脚本 | [bash_version/README.md](bash_version/README.md) |
-
-推荐使用 Python 版本，具有更好的可维护性、配置校验（pydantic）和 dry-run 预览功能。
+当前项目使用 Python + YAML 配置驱动，具有配置校验（pydantic）和 dry-run 预览功能。详细文档见 [`py_llm_bench/README.md`](py_llm_bench/README.md)。
 
 ## 快速体验
 
