@@ -1,4 +1,4 @@
-# py_llm_bench
+# sgl_bench
 
 基于 Python 的 SGLang 推理测试套件，使用 YAML 配置文件驱动，覆盖性能压测、模型精度评测、长文本生成、多轮对话、Torch Profiler 采集五大场景。基于 Docker + SGLang，可独立部署使用。
 
@@ -14,32 +14,32 @@ pip install pyyaml pydantic docker httpx
 
 ```bash
 # 先用 dry-run 检查配置（不会启动任何容器）
-python3 -m py_llm_bench --config py_llm_bench/config_examples/config_4b_benchmark.yaml --dry-run
+python3 -m sgl_bench --config sgl_bench/config_examples/config_4b_benchmark.yaml --dry-run
 
 # 正式运行
-python3 -m py_llm_bench --config py_llm_bench/config_examples/config_4b_benchmark.yaml
+python3 -m sgl_bench --config sgl_bench/config_examples/config_4b_benchmark.yaml
 ```
 
 ### 六种运行模式
 
 ```bash
 # 性能压测
-python3 -m py_llm_bench --config config_benchmark.yaml
+python3 -m sgl_bench --config config_benchmark.yaml
 
 # 交互对话
-python3 -m py_llm_bench --config config_chat.yaml
+python3 -m sgl_bench --config config_chat.yaml
 
 # 精度评测（lm_eval）
-python3 -m py_llm_bench --config config_eval.yaml
+python3 -m sgl_bench --config config_eval.yaml
 
 # 长文本生成验证
-python3 -m py_llm_bench --config config_longform.yaml
+python3 -m sgl_bench --config config_longform.yaml
 
 # 多轮对话记忆验证
-python3 -m py_llm_bench --config config_multiturn.yaml
+python3 -m sgl_bench --config config_multiturn.yaml
 
 # Torch Profiler 采集
-python3 -m py_llm_bench --config config_profile.yaml
+python3 -m sgl_bench --config config_profile.yaml
 ```
 
 ### CLI 参数覆盖
@@ -48,25 +48,25 @@ python3 -m py_llm_bench --config config_profile.yaml
 
 ```bash
 # 临时切换 benchmark 后端
-python3 -m py_llm_bench --config config.yaml --bench-backend vllm
+python3 -m sgl_bench --config config.yaml --bench-backend vllm
 
 # 临时切换端口
-python3 -m py_llm_bench --config config.yaml --port 9999
+python3 -m sgl_bench --config config.yaml --port 9999
 
 # 临时切换 eval 任务
-python3 -m py_llm_bench --config config.yaml --run-mode eval --eval-tasks mmlu --eval-num-fewshot 0
+python3 -m sgl_bench --config config.yaml --run-mode eval --eval-tasks mmlu --eval-num-fewshot 0
 
 # 限制评测样本数（快速调试）
-python3 -m py_llm_bench --config config.yaml --run-mode eval --eval-limit 50
+python3 -m sgl_bench --config config.yaml --run-mode eval --eval-limit 50
 
 # 单次 chat 模式
-python3 -m py_llm_bench --config config_chat.yaml --chat-prompt "1+1等于几？"
+python3 -m sgl_bench --config config_chat.yaml --chat-prompt "1+1等于几？"
 ```
 
 环境变量也可以覆盖（优先级：CLI > 环境变量 > YAML 配置 > 默认值）：
 
 ```bash
-RUN_MODE=eval EVAL_TASKS=mmlu python3 -m py_llm_bench --config config.yaml
+RUN_MODE=eval EVAL_TASKS=mmlu python3 -m sgl_bench --config config.yaml
 ```
 
 ### Dry-run 模式
@@ -74,7 +74,7 @@ RUN_MODE=eval EVAL_TASKS=mmlu python3 -m py_llm_bench --config config.yaml
 `--dry-run` 只解析配置文件，不启动容器和服务，而是打印完整的运行计划：
 
 ```bash
-python3 -m py_llm_bench --config config.yaml --dry-run
+python3 -m sgl_bench --config config.yaml --dry-run
 ```
 
 输出包含：
@@ -91,9 +91,9 @@ python3 -m py_llm_bench --config config.yaml --dry-run
 ## 目录结构
 
 ```
-py_llm_bench/
+sgl_bench/
 ├── cli.py                    # 命令行入口
-├── __main__.py               # python -m py_llm_bench 支持
+├── __main__.py               # python -m sgl_bench 支持
 ├── config.py                 # YAML 配置加载 + pydantic 校验
 ├── container.py              # Docker 容器生命周期管理
 ├── server.py                 # SGLang server 启动/健康检查/预热
@@ -576,7 +576,7 @@ server_args:
 
 ## 输出文件说明
 
-所有测试结果保存在 `py_llm_bench/runs/run_<时间戳>/` 目录下。
+所有测试结果保存在 `sgl_bench/runs/run_<时间戳>/` 目录下。
 
 ### benchmark 模式输出
 
@@ -663,7 +663,7 @@ runs/run_<时间戳>/profile_01_conc224_isl4096_osl5_np224/
 
 1. 复制最接近的示例配置：
    ```bash
-   cp py_llm_bench/config_examples/config_4b_benchmark.yaml my_config.yaml
+   cp sgl_bench/config_examples/config_4b_benchmark.yaml my_config.yaml
    ```
 
 2. 修改 `image`、`model_path`、`model_prefix`、`host_model_mount_path`
@@ -674,8 +674,8 @@ runs/run_<时间戳>/profile_01_conc224_isl4096_osl5_np224/
 
 5. 先 dry-run 确认，再正式运行：
    ```bash
-   python3 -m py_llm_bench --config my_config.yaml --dry-run
-   python3 -m py_llm_bench --config my_config.yaml
+   python3 -m sgl_bench --config my_config.yaml --dry-run
+   python3 -m sgl_bench --config my_config.yaml
    ```
 
 ### 连接已有容器

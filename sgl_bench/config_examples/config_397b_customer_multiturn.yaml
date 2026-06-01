@@ -68,4 +68,4 @@ server_args:
   - "--enable-metrics"
   - "--collect-tokens-histogram"
 
-multiturn_turns_file: "/raid/users/jialzhu/code_backup/qwen397b-coredump/sgl_benchmark/py_llm_bench/config_examples/_customer_repro_assets/turns_multiturn.json"
+multiturn_turns_file: "/raid/users/jialzhu/code_backup/qwen397b-coredump/sgl_benchmark/sgl_bench/config_examples/_customer_repro_assets/turns_multiturn.json"

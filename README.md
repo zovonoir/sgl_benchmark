@@ -2,7 +2,7 @@
 
 配置驱动的 SGLang 推理测试套件，覆盖性能压测、模型精度评测、长文本生成、多轮对话验证、Torch Profiler 采集五大场景。基于 Docker + SGLang，可独立部署到任意机器使用。
 
-当前项目使用 Python + YAML 配置驱动，具有配置校验（pydantic）和 dry-run 预览功能。详细文档见 [`py_llm_bench/README.md`](py_llm_bench/README.md)。
+当前项目入口为 [`sgl_bench/`](sgl_bench/)，使用 Python + YAML 配置驱动，具有配置校验（pydantic）和 dry-run 预览功能。详细文档见 [`sgl_bench/README.md`](sgl_bench/README.md)。
 
 ## 快速体验
 
@@ -11,10 +11,10 @@
 pip install pyyaml pydantic docker httpx
 
 # 先 dry-run 预览配置（不启动容器）
-python3 -m py_llm_bench --config py_llm_bench/config_examples/config_4b_benchmark.yaml --dry-run
+python3 -m sgl_bench --config sgl_bench/config_examples/config_4b_benchmark.yaml --dry-run
 
 # 正式运行性能压测
-python3 -m py_llm_bench --config py_llm_bench/config_examples/config_4b_benchmark.yaml
+python3 -m sgl_bench --config sgl_bench/config_examples/config_4b_benchmark.yaml
 ```
 
 ## 支持的测试模式
