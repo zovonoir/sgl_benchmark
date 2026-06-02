@@ -154,6 +154,10 @@ class VllmBenchmarkRunner:
                         container_profile_dir,
                         profile_case.profile_with_stack,
                     ),
+                    extra_args=self._profile_server_args(
+                        container_profile_dir,
+                        profile_case.profile_with_stack,
+                    ),
                 )
                 self._wait_ready(container_case_dir)
                 rc = self._run_benchmark(container_case_dir, result_stem, test_case, profile=True)
@@ -165,9 +169,11 @@ class VllmBenchmarkRunner:
                 self._write_container_status(container_case_dir, rc, elapsed)
                 self.container.copy_case_results(case_name, host_case_dir)
                 self._write_meta_and_aggregate(host_case_dir, case_name, result_stem, test_case)
-                self._print_trace_files(host_case_dir)
+                trace_count = self._print_trace_files(host_case_dir)
                 if rc != 0:
                     raise RuntimeError(f"Profile benchmark exited with code {rc}")
+                if trace_count == 0:
+                    raise RuntimeError("Profile completed but no trace files were generated")
             finally:
                 self._log_gpu_pids(container_case_dir, "gpu_pids_before_final_cleanup.log")
                 self.cleanup_best_effort()
@@ -515,10 +521,11 @@ print("cleanup_targets=" + ",".join(map(str, targets)))
         container_case_dir: str,
         result_stem: str,
         environment: dict[str, str] | None = None,
+        extra_args: list[str] | None = None,
     ) -> None:
         server_log = f"{container_case_dir}/server_{result_stem}.log"
         pid_file = f"{container_case_dir}/server.pid"
-        cmd = self._server_command()
+        cmd = self._server_command(extra_args=extra_args)
         shell = (
             f"cd {shlex.quote(container_case_dir)} && "
             f"setsid {' '.join(shlex.quote(part) for part in cmd)} "
@@ -535,12 +542,14 @@ print("cleanup_targets=" + ",".join(map(str, targets)))
         if exit_code != 0:
             raise RuntimeError(output.decode("utf-8", "ignore"))
 
-    def _server_command(self) -> list[str]:
+    def _server_command(self, extra_args: list[str] | None = None) -> list[str]:
         cmd = ["vllm", "serve", self.config.model_path]
         if not self._server_args_have("--port"):
             cmd.extend(["--port", str(self.config.port)])
         for arg in self.config.server_args:
             cmd.extend(shlex.split(arg))
+        if extra_args:
+            cmd.extend(extra_args)
         return cmd
 
     def _server_args_have(self, option: str) -> bool:
@@ -821,6 +830,16 @@ print("cleanup_targets=" + ",".join(map(str, targets)))
             "VLLM_RPC_TIMEOUT": "1800000",
         }
 
+    @staticmethod
+    def _profile_server_args(profile_dir: str, profile_with_stack: bool) -> list[str]:
+        profiler_config = {
+            "profiler": "torch",
+            "torch_profiler_dir": profile_dir,
+            "torch_profiler_with_stack": profile_with_stack,
+            "torch_profiler_use_gzip": True,
+        }
+        return ["--profiler-config", json.dumps(profiler_config, ensure_ascii=False)]
+
     def _prepare_profile_dir(self, container_profile_dir: str) -> None:
         self.container.exec_run(["bash", "-lc", f"mkdir -p {shlex.quote(container_profile_dir)}"])
 
@@ -878,15 +897,16 @@ print(json.dumps(sizes))
             return {}
 
     @staticmethod
-    def _print_trace_files(host_case_dir: Path) -> None:
+    def _print_trace_files(host_case_dir: Path) -> int:
         trace_files = sorted(host_case_dir.rglob("*.trace.json.gz"))
         if not trace_files:
             print(f">>> No trace files found under {host_case_dir}")
-            return
+            return 0
         print(f"\n>>> Trace files in {host_case_dir}:")
         for path in trace_files:
             size_mb = path.stat().st_size / (1024 * 1024)
             print(f"    {path.relative_to(host_case_dir)} ({size_mb:.1f} MB)")
+        return len(trace_files)
 
     def _case_name(self, idx: int, tc: TestCaseConfig) -> str:
         return f"case_{idx:02d}_conc{tc.concurrency}_isl{tc.isl}_osl{tc.osl}_np{tc.num_prompts}"
