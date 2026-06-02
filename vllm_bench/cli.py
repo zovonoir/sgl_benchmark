@@ -34,6 +34,8 @@ def _print_banner(config: SuiteConfig, run_dir: Path) -> None:
         print(f"Longform      : {len(config.longform_prompts)} prompts")
     elif config.run_mode == "multiturn":
         print(f"Multiturn     : {len(config.multiturn_turns)} inline turns")
+    elif config.run_mode == "profile":
+        print(f"Profile cases : {len(config.profile_configs)}")
     print("=" * 60)
 
 
@@ -118,6 +120,30 @@ def _print_dry_run(config: SuiteConfig, run_dir: Path, project_root: Path) -> No
         print(f"  turns_file={config.multiturn_turns_file}")
         print(f"  max_tokens={config.multiturn_max_tokens}")
         print(f"  enable_thinking={config.enable_thinking}")
+    elif config.run_mode == "profile":
+        print("\n[5] Profile Cases:")
+        for idx, case in enumerate(config.profile_configs, start=1):
+            num_prompts = case.num_prompts or case.concurrency
+            case_name = (
+                f"profile_{idx:02d}_conc{case.concurrency}"
+                f"_isl{case.isl}_osl{case.osl}_np{num_prompts}"
+            )
+            profile_dir = f"{config.suite_path_in_container}/_output/{case_name}/traces"
+            result_stem = (
+                f"{case_name}_{_sanitize(config.model_prefix)}_{config.precision}"
+                f"_{config.framework}_tp{config.tensor_parallel_size()}"
+            )
+            print(
+                f"  Case {idx:02d}: conc={case.concurrency} isl={case.isl} "
+                f"osl={case.osl} prompts={num_prompts}"
+            )
+            print(f"    profile_with_stack={case.profile_with_stack}")
+            print(f"    VLLM_TORCH_PROFILER_DIR={profile_dir}")
+            print(f"    VLLM_RPC_TIMEOUT=1800000")
+            print(
+                "    Benchmark command: "
+                + _profile_benchmark_command(config, case, num_prompts, case_name, result_stem)
+            )
 
     print(f"\n[6] Output:")
     print(f"  Run directory: {run_dir}")
@@ -135,7 +161,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Path to YAML configuration file",
     )
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--run-mode", choices=["benchmark", "eval", "chat", "longform", "multiturn"])
+    parser.add_argument("--run-mode", choices=["benchmark", "eval", "chat", "longform", "multiturn", "profile"])
     parser.add_argument("--port", type=int)
     parser.add_argument("--num-warmups", type=int)
     parser.add_argument("--eval-tasks", type=str)
@@ -199,4 +225,65 @@ def main(argv: list[str] | None = None) -> int:
         runner.cleanup_best_effort()
         return 1
     return 0
+
+
+def _sanitize(value: str) -> str:
+    return value.replace("/", "_").replace(":", "_").replace(" ", "_")
+
+
+def _profile_benchmark_command(
+    config: SuiteConfig,
+    case,
+    num_prompts: int,
+    case_name: str,
+    result_stem: str,
+) -> str:
+    cmd = [
+        "python3",
+        f"{config.suite_path_in_container}/sgl_bench/utils/bench_serving/benchmark_serving.py",
+        "--backend",
+        "vllm",
+        "--base-url",
+        f"http://localhost:{config.port}",
+        "--endpoint",
+        "/v1/completions",
+        "--model",
+        config.model_path,
+        "--dataset-name",
+        "random",
+        "--random-input-len",
+        str(case.isl),
+        "--random-output-len",
+        str(case.osl),
+        "--random-range-ratio",
+        str(config.random_range_ratio),
+        "--num-prompts",
+        str(num_prompts),
+        "--num-warmups",
+        str(config.num_warmups),
+        "--request-rate",
+        config.request_rate,
+        "--max-concurrency",
+        str(case.concurrency),
+        "--burstiness",
+        str(config.burstiness),
+        "--trust-remote-code",
+        "--save-result",
+        "--percentile-metrics",
+        "ttft,tpot,itl,e2el",
+        "--result-dir",
+        f"{config.suite_path_in_container}/_output/{case_name}",
+        "--result-filename",
+        f"{result_stem}.json",
+        "--profile",
+    ]
+    if config.benchmark_ignore_eos:
+        cmd.append("--ignore-eos")
+    if config.benchmark_temperature is not None:
+        cmd.extend(["--temperature", str(config.benchmark_temperature)])
+    if config.benchmark_extra_request_body:
+        import json
+
+        cmd.extend(["--extra-request-body", json.dumps(config.benchmark_extra_request_body, ensure_ascii=False)])
+    return " ".join(shlex.quote(part) for part in cmd)
 

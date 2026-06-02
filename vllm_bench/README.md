@@ -62,9 +62,8 @@ python -m vllm_bench --config <config.yaml> --dry-run
   and saves the outputs.
 - `multiturn`: sends a configured multi-turn conversation while preserving
   assistant history between turns.
-
-`profile` is not supported in `vllm_bench` yet. Use `sgl_bench` profile mode for
-SGLang profiling, or add a vLLM-specific profiling runner later.
+- `profile`: starts `vllm serve` with Torch Profiler enabled, runs a short
+  serving benchmark with `--profile`, and saves `.trace.json.gz` files.
 
 The mode can be set in YAML:
 
@@ -80,7 +79,7 @@ python -m vllm_bench --config <benchmark-config.yaml> --run-mode eval
 
 Command-line overrides currently include:
 
-- `--run-mode benchmark|eval|chat|longform|multiturn`
+- `--run-mode benchmark|eval|chat|longform|multiturn|profile`
 - `--port`
 - `--num-warmups`
 - `--eval-tasks`
@@ -156,6 +155,8 @@ docker_run_args:
   before starting `vllm serve`; useful for installing `lm_eval`.
 - `test_configs`: benchmark cases with `concurrency`, `isl`, `osl`, and
   `num_prompts`.
+- `profile_configs`: profiler cases with `concurrency`, `isl`, `osl`,
+  optional `num_prompts`, and `profile_with_stack`.
 - `eval_tasks`, `eval_num_fewshot`, `eval_limit`, `eval_num_concurrent`: eval
   settings used in `run_mode: eval`.
 - `chat_prompt`, `chat_max_tokens`, `chat_temperature`: chat mode settings.
@@ -185,6 +186,7 @@ container_env:
 | `deepseek_v4_pro_tp8_chat_mtp_perf_acc_base1_image.yaml` | MTP single-shot chat example. |
 | `deepseek_v4_pro_tp8_longform_mtp_perf_acc_base1_image.yaml` | MTP long-form generation example. |
 | `deepseek_v4_pro_tp8_multiturn_mtp_perf_acc_base1_image.yaml` | MTP multi-turn conversation example. |
+| `deepseek_v4_pro_tp8_profile_mtp_perf_acc_base1_image.yaml` | MTP Torch Profiler example with a small default workload. |
 
 ## Known Good Results
 
@@ -255,6 +257,26 @@ vllm_bench/runs/run_<timestamp>/multiturn/
 ├── _multiturn_turns.json
 └── server_<result>.log
 ```
+
+Profile mode writes:
+
+```text
+vllm_bench/runs/run_<timestamp>/profile_01_conc8_isl1024_osl5_np8/
+├── traces/
+│   └── *.trace.json.gz
+├── <result>.json
+├── agg_<result>.json
+├── meta_<result>.json
+├── run_<result>.log
+├── server_<result>.log
+└── status.txt
+```
+
+Profile mode sets `VLLM_TORCH_PROFILER_DIR` for the `vllm serve` process and
+uses the benchmark client's `--profile` flag to call `/start_profile` and
+`/stop_profile`. Trace files can be opened directly in
+[Perfetto](https://ui.perfetto.dev/). Keep `osl` and `num_prompts` small for
+first runs because traces can grow quickly.
 
 ## Cleanup
 

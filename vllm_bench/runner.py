@@ -9,7 +9,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from .config import SuiteConfig, TestCaseConfig
+from .config import ProfileCaseConfig, SuiteConfig, TestCaseConfig
 from .container import ExistingContainerManager
 from .report import aggregate_case, generate_summary
 
@@ -45,6 +45,9 @@ class VllmBenchmarkRunner:
                 return
             if self.config.run_mode == "multiturn":
                 self._run_multiturn()
+                return
+            if self.config.run_mode == "profile":
+                self._run_profile()
                 return
 
             for idx, test_case in enumerate(self.config.test_configs, start=1):
@@ -114,6 +117,63 @@ class VllmBenchmarkRunner:
 
         print(f"\n>>> Eval finished")
         print(f">>> Eval summary: {host_case_dir / 'eval_summary.txt'}")
+
+    def _run_profile(self) -> None:
+        for idx, profile_case in enumerate(self.config.profile_configs, start=1):
+            num_prompts = profile_case.num_prompts or profile_case.concurrency
+            test_case = TestCaseConfig(
+                concurrency=profile_case.concurrency,
+                isl=profile_case.isl,
+                osl=profile_case.osl,
+                num_prompts=num_prompts,
+            )
+            case_name = self._profile_case_name(idx, profile_case, num_prompts)
+            host_case_dir = self.run_dir / case_name
+            container_case_dir = f"{self.container.output_path}/{case_name}"
+            container_profile_dir = f"{container_case_dir}/traces"
+            result_stem = self._result_stem(case_name, test_case)
+
+            print(f"\n>>> [{idx}/{len(self.config.profile_configs)}] {case_name}")
+            print(
+                f">>> CONC={profile_case.concurrency} ISL={profile_case.isl} "
+                f"OSL={profile_case.osl} NP={num_prompts}"
+            )
+            print(f">>> profile_with_stack={profile_case.profile_with_stack}")
+
+            started_at = time.time()
+            rc = 1
+            try:
+                self._prepare_case_dir(container_case_dir)
+                self._prepare_profile_dir(container_profile_dir)
+                self._log_gpu_pids(container_case_dir, "gpu_pids_before_cleanup.log")
+                self.cleanup_best_effort()
+                self._start_server(
+                    container_case_dir,
+                    result_stem,
+                    environment=self._profile_environment(
+                        container_profile_dir,
+                        profile_case.profile_with_stack,
+                    ),
+                )
+                self._wait_ready(container_case_dir)
+                rc = self._run_benchmark(container_case_dir, result_stem, test_case, profile=True)
+                if rc == 0:
+                    self._wait_container_traces_stable(container_profile_dir)
+                else:
+                    print(">>> Skipping trace stability wait because profile benchmark failed")
+                elapsed = int(time.time() - started_at)
+                self._write_container_status(container_case_dir, rc, elapsed)
+                self.container.copy_case_results(case_name, host_case_dir)
+                self._write_meta_and_aggregate(host_case_dir, case_name, result_stem, test_case)
+                self._print_trace_files(host_case_dir)
+                if rc != 0:
+                    raise RuntimeError(f"Profile benchmark exited with code {rc}")
+            finally:
+                self._log_gpu_pids(container_case_dir, "gpu_pids_before_final_cleanup.log")
+                self.cleanup_best_effort()
+
+        print(f"\n>>> All profile cases finished")
+        print(f">>> Results directory: {self.run_dir}")
 
     def _run_chat(self) -> None:
         case_name = "chat"
@@ -320,8 +380,27 @@ except urllib.error.HTTPError as exc:
         if code != 0:
             raise RuntimeError(f"chat request failed: {text}")
         data = json.loads(text)
-        content = data["choices"][0]["message"]["content"]
+        message = data["choices"][0]["message"]
+        content = self._assistant_message_text(message)
         return content, data.get("usage", {})
+
+    @staticmethod
+    def _assistant_message_text(message: dict) -> str:
+        """Return a printable assistant response from OpenAI-compatible chat output."""
+
+        content = message.get("content")
+        if isinstance(content, str):
+            return content
+        if content is not None:
+            return json.dumps(content, ensure_ascii=False)
+
+        reasoning_content = message.get("reasoning_content")
+        if isinstance(reasoning_content, str):
+            return reasoning_content
+        if reasoning_content is not None:
+            return json.dumps(reasoning_content, ensure_ascii=False)
+
+        return json.dumps(message, ensure_ascii=False)
 
     def _write_container_file(self, path: str, content: str) -> None:
         script = "import os; open(os.environ['OUT_PATH'], 'w', encoding='utf-8').write(os.environ['OUT_CONTENT'])"
@@ -431,7 +510,12 @@ print("cleanup_targets=" + ",".join(map(str, targets)))
             f"rm -rf {shlex.quote(container_case_dir)} && mkdir -p {shlex.quote(container_case_dir)}",
         ])
 
-    def _start_server(self, container_case_dir: str, result_stem: str) -> None:
+    def _start_server(
+        self,
+        container_case_dir: str,
+        result_stem: str,
+        environment: dict[str, str] | None = None,
+    ) -> None:
         server_log = f"{container_case_dir}/server_{result_stem}.log"
         pid_file = f"{container_case_dir}/server.pid"
         cmd = self._server_command()
@@ -443,7 +527,11 @@ print("cleanup_targets=" + ",".join(map(str, targets)))
         )
         print(">>> Starting vLLM server:")
         print("    " + " ".join(shlex.quote(part) for part in cmd))
-        exit_code, output = self.container.exec_run(["bash", "-lc", shell])
+        if environment:
+            print(">>> Server environment overrides:")
+            for key, value in sorted(environment.items()):
+                print(f"    {key}={value}")
+        exit_code, output = self.container.exec_run(["bash", "-lc", shell], environment=environment)
         if exit_code != 0:
             raise RuntimeError(output.decode("utf-8", "ignore"))
 
@@ -500,6 +588,7 @@ print("cleanup_targets=" + ",".join(map(str, targets)))
         container_case_dir: str,
         result_stem: str,
         test_case: TestCaseConfig,
+        profile: bool = False,
     ) -> int:
         run_log = f"{container_case_dir}/run_{result_stem}.log"
         cmd = [
@@ -549,8 +638,10 @@ print("cleanup_targets=" + ",".join(map(str, targets)))
                 "--extra-request-body",
                 json.dumps(self.config.benchmark_extra_request_body, ensure_ascii=False),
             ])
+        if profile:
+            cmd.append("--profile")
 
-        print(">>> Running benchmark:")
+        print(">>> Running profile benchmark:" if profile else ">>> Running benchmark:")
         print("    " + " ".join(shlex.quote(part) for part in cmd))
         shell = (
             "set -o pipefail; "
@@ -722,8 +813,89 @@ print("cleanup_targets=" + ",".join(map(str, targets)))
             ),
         ])
 
+    @staticmethod
+    def _profile_environment(profile_dir: str, profile_with_stack: bool) -> dict[str, str]:
+        return {
+            "VLLM_TORCH_PROFILER_DIR": profile_dir,
+            "VLLM_TORCH_PROFILER_WITH_STACK": "1" if profile_with_stack else "0",
+            "VLLM_RPC_TIMEOUT": "1800000",
+        }
+
+    def _prepare_profile_dir(self, container_profile_dir: str) -> None:
+        self.container.exec_run(["bash", "-lc", f"mkdir -p {shlex.quote(container_profile_dir)}"])
+
+    def _wait_container_traces_stable(
+        self,
+        container_profile_dir: str,
+        interval: int = 10,
+        max_wait: int = 300,
+    ) -> None:
+        print(">>> Waiting for vLLM trace files to finish writing...")
+        prev_sizes: dict[str, int] = {}
+        elapsed = 0
+        while elapsed < max_wait:
+            time.sleep(interval)
+            elapsed += interval
+            current_sizes = self._container_trace_sizes(container_profile_dir)
+            if not current_sizes:
+                continue
+            if current_sizes == prev_sizes:
+                print(f">>> Trace files stable ({len(current_sizes)} files)")
+                return
+            prev_sizes = current_sizes
+            if elapsed % 30 == 0:
+                total_mb = sum(current_sizes.values()) / (1024 * 1024)
+                print(f">>> Still writing traces... ({total_mb:.1f} MB total, {elapsed}s elapsed)")
+        print(">>> Warning: trace file wait timeout, files may still be writing")
+
+    def _container_trace_sizes(self, container_profile_dir: str) -> dict[str, int]:
+        script = r'''
+import json
+import os
+
+root = os.environ["PROFILE_DIR"]
+sizes = {}
+if os.path.isdir(root):
+    for dirpath, _, filenames in os.walk(root):
+        for filename in filenames:
+            if filename.endswith(".trace.json.gz"):
+                path = os.path.join(dirpath, filename)
+                try:
+                    sizes[path] = os.path.getsize(path)
+                except OSError:
+                    pass
+print(json.dumps(sizes))
+'''
+        code, output = self.container.exec_run(
+            ["python3", "-c", script],
+            environment={"PROFILE_DIR": container_profile_dir},
+        )
+        if code != 0:
+            return {}
+        try:
+            return {str(key): int(value) for key, value in json.loads(output.decode("utf-8")).items()}
+        except (json.JSONDecodeError, ValueError):
+            return {}
+
+    @staticmethod
+    def _print_trace_files(host_case_dir: Path) -> None:
+        trace_files = sorted(host_case_dir.rglob("*.trace.json.gz"))
+        if not trace_files:
+            print(f">>> No trace files found under {host_case_dir}")
+            return
+        print(f"\n>>> Trace files in {host_case_dir}:")
+        for path in trace_files:
+            size_mb = path.stat().st_size / (1024 * 1024)
+            print(f"    {path.relative_to(host_case_dir)} ({size_mb:.1f} MB)")
+
     def _case_name(self, idx: int, tc: TestCaseConfig) -> str:
         return f"case_{idx:02d}_conc{tc.concurrency}_isl{tc.isl}_osl{tc.osl}_np{tc.num_prompts}"
+
+    def _profile_case_name(self, idx: int, case: ProfileCaseConfig, num_prompts: int) -> str:
+        return (
+            f"profile_{idx:02d}_conc{case.concurrency}"
+            f"_isl{case.isl}_osl{case.osl}_np{num_prompts}"
+        )
 
     def _result_stem(self, case_name: str, tc: TestCaseConfig) -> str:
         model = sanitize(self.config.model_prefix)

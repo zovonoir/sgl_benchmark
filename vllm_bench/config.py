@@ -20,6 +20,16 @@ class TestCaseConfig(BaseModel):
     num_prompts: int
 
 
+class ProfileCaseConfig(BaseModel):
+    """A single profiler test case."""
+
+    concurrency: int
+    isl: int
+    osl: int = 5
+    num_prompts: int | None = None
+    profile_with_stack: bool = True
+
+
 class SuiteConfig(BaseModel):
     """Complete configuration for an existing-container vLLM benchmark run."""
 
@@ -32,7 +42,7 @@ class SuiteConfig(BaseModel):
     suite_path_in_container: str = "/tmp/vllm_bench_suite"
 
     # Model and metadata.
-    run_mode: Literal["benchmark", "eval", "chat", "longform", "multiturn"] = "benchmark"
+    run_mode: Literal["benchmark", "eval", "chat", "longform", "multiturn", "profile"] = "benchmark"
     model_path: str
     model_prefix: str
     host_model_mount_path: str | None = None
@@ -68,6 +78,7 @@ class SuiteConfig(BaseModel):
     benchmark_temperature: float | None = None
     benchmark_extra_request_body: dict[str, Any] = Field(default_factory=dict)
     test_configs: list[TestCaseConfig] = Field(default_factory=list)
+    profile_configs: list[ProfileCaseConfig] = Field(default_factory=list)
 
     # Eval settings.
     eval_tasks: str = "gsm8k"
@@ -99,6 +110,8 @@ class SuiteConfig(BaseModel):
             raise ValueError("exactly one of existing_container or image must be set")
         if self.run_mode == "benchmark" and not self.test_configs:
             raise ValueError("test_configs is required")
+        if self.run_mode == "profile" and not self.profile_configs:
+            raise ValueError("profile_configs is required for profile mode")
         if self.run_mode == "longform" and not self.longform_prompts:
             raise ValueError("longform_prompts is required for longform mode")
         if self.run_mode == "multiturn" and not self.multiturn_turns and not self.multiturn_turns_file:
