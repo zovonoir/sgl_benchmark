@@ -6,6 +6,7 @@ import json
 import shlex
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 from .config import SuiteConfig, TestCaseConfig
@@ -35,6 +36,15 @@ class VllmBenchmarkRunner:
 
             if self.config.run_mode == "eval":
                 self._run_eval()
+                return
+            if self.config.run_mode == "chat":
+                self._run_chat()
+                return
+            if self.config.run_mode == "longform":
+                self._run_longform()
+                return
+            if self.config.run_mode == "multiturn":
+                self._run_multiturn()
                 return
 
             for idx, test_case in enumerate(self.config.test_configs, start=1):
@@ -105,6 +115,139 @@ class VllmBenchmarkRunner:
         print(f"\n>>> Eval finished")
         print(f">>> Eval summary: {host_case_dir / 'eval_summary.txt'}")
 
+    def _run_chat(self) -> None:
+        case_name = "chat"
+        host_case_dir = self.run_dir / case_name
+        container_case_dir = f"{self.container.output_path}/{case_name}"
+        result_stem = f"chat_{sanitize(self.config.model_prefix)}_{self.config.precision}_{self.config.framework}_tp{self.config.tensor_parallel_size()}"
+        started_at = time.time()
+        try:
+            self._prepare_case_dir(container_case_dir)
+            self._log_gpu_pids(container_case_dir, "gpu_pids_before_cleanup.log")
+            self.cleanup_best_effort()
+            self._start_server(container_case_dir, result_stem)
+            self._wait_ready(container_case_dir)
+            prompt = self.config.chat_prompt
+            if not prompt:
+                try:
+                    prompt = input("\n[You] ")
+                except EOFError:
+                    prompt = ""
+            if not prompt:
+                raise RuntimeError("chat_prompt is required in non-interactive runs")
+
+            content, usage = self._chat_request(
+                [{"role": "user", "content": prompt}],
+                self.config.chat_max_tokens,
+                self.config.chat_temperature,
+            )
+            chat_log = container_case_dir + "/chat_log.txt"
+            payload = {
+                "model": self.config.model_path,
+                "date": datetime.now().strftime("%c"),
+                "prompt": prompt,
+                "response": content,
+                "usage": usage,
+            }
+            self._write_json_and_text(container_case_dir, "chat_result.json", payload, "chat_log.txt")
+            elapsed = int(time.time() - started_at)
+            self._write_container_status(container_case_dir, 0, elapsed)
+            self.container.copy_case_results(case_name, host_case_dir)
+            print(content)
+            print(f"\n>>> Chat log: {host_case_dir / 'chat_log.txt'}")
+        finally:
+            self._log_gpu_pids(container_case_dir, "gpu_pids_before_final_cleanup.log")
+            self.cleanup_best_effort()
+
+    def _run_longform(self) -> None:
+        case_name = "longform"
+        host_case_dir = self.run_dir / case_name
+        container_case_dir = f"{self.container.output_path}/{case_name}"
+        result_stem = f"longform_{sanitize(self.config.model_prefix)}_{self.config.precision}_{self.config.framework}_tp{self.config.tensor_parallel_size()}"
+        started_at = time.time()
+        try:
+            self._prepare_case_dir(container_case_dir)
+            self._log_gpu_pids(container_case_dir, "gpu_pids_before_cleanup.log")
+            self.cleanup_best_effort()
+            self._start_server(container_case_dir, result_stem)
+            self._wait_ready(container_case_dir)
+            results = []
+            for idx, prompt in enumerate(self.config.longform_prompts, start=1):
+                print(f">>> Longform {idx}/{len(self.config.longform_prompts)}: {prompt[:80]}...")
+                content, usage = self._chat_request(
+                    [{"role": "user", "content": prompt}],
+                    self.config.longform_max_tokens,
+                    self.config.chat_temperature,
+                    timeout=900,
+                )
+                results.append({
+                    "index": idx,
+                    "prompt": prompt,
+                    "response": content,
+                    "usage": usage,
+                })
+            self._write_json_and_text(
+                container_case_dir,
+                "longform_results.json",
+                {"model": self.config.model_path, "results": results},
+                "longform_results.txt",
+            )
+            elapsed = int(time.time() - started_at)
+            self._write_container_status(container_case_dir, 0, elapsed)
+            self.container.copy_case_results(case_name, host_case_dir)
+            print(f"\n>>> Longform results: {host_case_dir / 'longform_results.txt'}")
+        finally:
+            self._log_gpu_pids(container_case_dir, "gpu_pids_before_final_cleanup.log")
+            self.cleanup_best_effort()
+
+    def _run_multiturn(self) -> None:
+        case_name = "multiturn"
+        host_case_dir = self.run_dir / case_name
+        container_case_dir = f"{self.container.output_path}/{case_name}"
+        result_stem = f"multiturn_{sanitize(self.config.model_prefix)}_{self.config.precision}_{self.config.framework}_tp{self.config.tensor_parallel_size()}"
+        started_at = time.time()
+        try:
+            self._prepare_case_dir(container_case_dir)
+            self._log_gpu_pids(container_case_dir, "gpu_pids_before_cleanup.log")
+            self.cleanup_best_effort()
+            self._start_server(container_case_dir, result_stem)
+            self._wait_ready(container_case_dir)
+            turns = self._load_multiturn_turns()
+            messages = []
+            results = []
+            for idx, turn in enumerate(turns, start=1):
+                prompt = turn["user"]
+                max_tokens = int(turn.get("max_tokens", self.config.multiturn_max_tokens))
+                messages.append({"role": "user", "content": prompt})
+                print(f">>> Turn {idx}/{len(turns)}: {prompt[:80]}...")
+                content, usage = self._chat_request(
+                    messages,
+                    max_tokens,
+                    self.config.chat_temperature,
+                    timeout=900,
+                )
+                messages.append({"role": "assistant", "content": content})
+                results.append({
+                    "turn": idx,
+                    "user": prompt,
+                    "assistant": content,
+                    "usage": usage,
+                })
+            self._write_json_and_text(
+                container_case_dir,
+                "multiturn_results.json",
+                {"model": self.config.model_path, "turns": results},
+                "accuracy_multiturn_multiturn.txt",
+            )
+            self._write_container_file(container_case_dir + "/_multiturn_turns.json", json.dumps(turns, ensure_ascii=False, indent=2))
+            elapsed = int(time.time() - started_at)
+            self._write_container_status(container_case_dir, 0, elapsed)
+            self.container.copy_case_results(case_name, host_case_dir)
+            print(f"\n>>> Multiturn results: {host_case_dir / 'accuracy_multiturn_multiturn.txt'}")
+        finally:
+            self._log_gpu_pids(container_case_dir, "gpu_pids_before_final_cleanup.log")
+            self.cleanup_best_effort()
+
     def _check_eval_dependencies(self) -> None:
         code, output = self.container.exec_run([
             "bash",
@@ -116,6 +259,123 @@ class VllmBenchmarkRunner:
                 "lm_eval is not installed in the target container. "
                 "Install it first, e.g. `pip install git+https://github.com/EleutherAI/lm-evaluation-harness.git tenacity`."
             )
+
+    def _load_multiturn_turns(self) -> list[dict]:
+        if self.config.multiturn_turns:
+            return [{"user": turn} for turn in self.config.multiturn_turns]
+        if self.config.multiturn_turns_file:
+            path = Path(self.config.multiturn_turns_file).expanduser()
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            normalized = []
+            for item in data:
+                if isinstance(item, str):
+                    normalized.append({"user": item})
+                else:
+                    normalized.append(item)
+            return normalized
+        raise ValueError("No multiturn turns configured")
+
+    def _chat_request(
+        self,
+        messages: list[dict],
+        max_tokens: int,
+        temperature: float,
+        timeout: int = 600,
+    ) -> tuple[str, dict]:
+        body = {
+            "model": self.config.model_path,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "stream": False,
+            "chat_template_kwargs": {"enable_thinking": self.config.enable_thinking},
+        }
+        script = r'''
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+
+url = os.environ["VLLM_BENCH_CHAT_URL"]
+body = os.environ["VLLM_BENCH_CHAT_BODY"].encode("utf-8")
+req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
+try:
+    with urllib.request.urlopen(req, timeout=int(os.environ.get("VLLM_BENCH_CHAT_TIMEOUT", "600"))) as resp:
+        sys.stdout.write(resp.read().decode("utf-8"))
+except urllib.error.HTTPError as exc:
+    sys.stderr.write(exc.read().decode("utf-8", "replace"))
+    raise
+'''
+        code, output = self.container.exec_run(
+            ["python3", "-c", script],
+            environment={
+                "VLLM_BENCH_CHAT_URL": f"http://localhost:{self.config.port}/v1/chat/completions",
+                "VLLM_BENCH_CHAT_BODY": json.dumps(body, ensure_ascii=False),
+                "VLLM_BENCH_CHAT_TIMEOUT": str(timeout),
+            },
+        )
+        text = output.decode("utf-8", "replace")
+        if code != 0:
+            raise RuntimeError(f"chat request failed: {text}")
+        data = json.loads(text)
+        content = data["choices"][0]["message"]["content"]
+        return content, data.get("usage", {})
+
+    def _write_container_file(self, path: str, content: str) -> None:
+        script = "import os; open(os.environ['OUT_PATH'], 'w', encoding='utf-8').write(os.environ['OUT_CONTENT'])"
+        self.container.exec_run(
+            ["python3", "-c", script],
+            environment={"OUT_PATH": path, "OUT_CONTENT": content},
+        )
+
+    def _write_json_and_text(
+        self,
+        container_case_dir: str,
+        json_name: str,
+        payload: dict,
+        text_name: str,
+    ) -> None:
+        json_text = json.dumps(payload, ensure_ascii=False, indent=2)
+        lines = []
+        lines.append(f"Model: {self.config.model_path}")
+        lines.append(f"Date: {datetime.now().strftime('%c')}")
+        if "prompt" in payload:
+            lines.extend(["", "[Prompt]", payload["prompt"], "", "[Response]", payload["response"], ""])
+            lines.append(f"[Usage] {json.dumps(payload.get('usage', {}), ensure_ascii=False)}")
+        elif "results" in payload:
+            for item in payload["results"]:
+                lines.extend([
+                    "",
+                    "=" * 64,
+                    f"TEST {item['index']}",
+                    "=" * 64,
+                    "[Prompt]",
+                    item["prompt"],
+                    "",
+                    "[Response]",
+                    item["response"],
+                    "",
+                    f"[Usage] {json.dumps(item.get('usage', {}), ensure_ascii=False)}",
+                ])
+        elif "turns" in payload:
+            for item in payload["turns"]:
+                lines.extend([
+                    "",
+                    "=" * 64,
+                    f"TURN {item['turn']} [User]",
+                    "=" * 64,
+                    item["user"],
+                    "",
+                    f"--- TURN {item['turn']} [Model] ---",
+                    item["assistant"],
+                    "",
+                    f"[Usage] {json.dumps(item.get('usage', {}), ensure_ascii=False)}",
+                ])
+        text = "\n".join(lines) + "\n"
+        self._write_container_file(container_case_dir + "/" + json_name, json_text)
+        self._write_container_file(container_case_dir + "/" + text_name, text)
 
     def cleanup_best_effort(self) -> None:
         """Terminate vLLM processes that match configured cleanup patterns."""

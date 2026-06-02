@@ -31,7 +31,7 @@ server_args:
   - "--kv-cache-dtype fp8_e4m3"
   - "--compilation-config '{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\"}'"
 
-random_range_ratio: 0.8
+random_range_ratio: 1.0
 request_rate: "inf"
 burstiness: 1.0
 num_warmups: 128

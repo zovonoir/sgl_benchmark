@@ -26,8 +26,14 @@ def _print_banner(config: SuiteConfig, run_dir: Path) -> None:
     print(f"TP            : {config.tensor_parallel_size()}")
     if config.run_mode == "benchmark":
         print(f"Test cases    : {len(config.test_configs)}")
-    else:
+    elif config.run_mode == "eval":
         print(f"Eval tasks    : {config.eval_tasks}")
+    elif config.run_mode == "chat":
+        print(f"Chat prompt   : {config.chat_prompt or '<interactive>'}")
+    elif config.run_mode == "longform":
+        print(f"Longform      : {len(config.longform_prompts)} prompts")
+    elif config.run_mode == "multiturn":
+        print(f"Multiturn     : {len(config.multiturn_turns)} inline turns")
     print("=" * 60)
 
 
@@ -87,7 +93,7 @@ def _print_dry_run(config: SuiteConfig, run_dir: Path, project_root: Path) -> No
         print(f"  burstiness={config.burstiness}")
         print(f"  num_warmups={config.num_warmups}")
         print(f"  ignore_eos={config.benchmark_ignore_eos}")
-    else:
+    elif config.run_mode == "eval":
         print("\n[5] Eval:")
         print(f"  tasks={config.eval_tasks}")
         print(f"  num_fewshot={config.eval_num_fewshot}")
@@ -95,6 +101,23 @@ def _print_dry_run(config: SuiteConfig, run_dir: Path, project_root: Path) -> No
         print(f"  limit={config.eval_limit}")
         print(f"  num_concurrent={config.eval_num_concurrent}")
         print(f"  max_gen_toks={config.eval_max_gen_toks}")
+    elif config.run_mode == "chat":
+        print("\n[5] Chat:")
+        print(f"  prompt={config.chat_prompt or '<interactive>'}")
+        print(f"  stream={config.chat_stream}")
+        print(f"  max_tokens={config.chat_max_tokens}")
+        print(f"  enable_thinking={config.enable_thinking}")
+    elif config.run_mode == "longform":
+        print("\n[5] Longform:")
+        print(f"  prompts={len(config.longform_prompts)}")
+        print(f"  max_tokens={config.longform_max_tokens}")
+        print(f"  enable_thinking={config.enable_thinking}")
+    elif config.run_mode == "multiturn":
+        print("\n[5] Multiturn:")
+        print(f"  inline_turns={len(config.multiturn_turns)}")
+        print(f"  turns_file={config.multiturn_turns_file}")
+        print(f"  max_tokens={config.multiturn_max_tokens}")
+        print(f"  enable_thinking={config.enable_thinking}")
 
     print(f"\n[6] Output:")
     print(f"  Run directory: {run_dir}")
@@ -112,13 +135,15 @@ def main(argv: list[str] | None = None) -> int:
         help="Path to YAML configuration file",
     )
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--run-mode", choices=["benchmark", "eval"])
+    parser.add_argument("--run-mode", choices=["benchmark", "eval", "chat", "longform", "multiturn"])
     parser.add_argument("--port", type=int)
     parser.add_argument("--num-warmups", type=int)
     parser.add_argument("--eval-tasks", type=str)
     parser.add_argument("--eval-num-fewshot", type=int)
     parser.add_argument("--eval-limit", type=int)
     parser.add_argument("--eval-num-concurrent", type=int)
+    parser.add_argument("--chat-prompt", type=str)
+    parser.add_argument("--chat-max-tokens", type=int)
 
     args = parser.parse_args(argv)
     if not args.config:
@@ -132,6 +157,8 @@ def main(argv: list[str] | None = None) -> int:
         "eval_num_fewshot": args.eval_num_fewshot,
         "eval_limit": args.eval_limit,
         "eval_num_concurrent": args.eval_num_concurrent,
+        "chat_prompt": args.chat_prompt,
+        "chat_max_tokens": args.chat_max_tokens,
     }
 
     try:

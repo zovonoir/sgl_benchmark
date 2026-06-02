@@ -32,7 +32,7 @@ class SuiteConfig(BaseModel):
     suite_path_in_container: str = "/tmp/vllm_bench_suite"
 
     # Model and metadata.
-    run_mode: Literal["benchmark", "eval"] = "benchmark"
+    run_mode: Literal["benchmark", "eval", "chat", "longform", "multiturn"] = "benchmark"
     model_path: str
     model_prefix: str
     host_model_mount_path: str | None = None
@@ -81,12 +81,28 @@ class SuiteConfig(BaseModel):
     eval_timeout: int = 60000
     eval_log_samples: bool = True
 
+    # Chat / generation quality settings.
+    enable_thinking: bool = False
+    chat_prompt: str | None = None
+    chat_stream: bool = False
+    chat_max_tokens: int = 2048
+    chat_temperature: float = 0.0
+    longform_prompts: list[str] = Field(default_factory=list)
+    longform_max_tokens: int = 8192
+    multiturn_turns_file: str | None = None
+    multiturn_turns: list[str] = Field(default_factory=list)
+    multiturn_max_tokens: int = 2048
+
     @model_validator(mode="after")
     def _check_required_cases(self) -> "SuiteConfig":
         if bool(self.existing_container) == bool(self.image):
             raise ValueError("exactly one of existing_container or image must be set")
         if self.run_mode == "benchmark" and not self.test_configs:
             raise ValueError("test_configs is required")
+        if self.run_mode == "longform" and not self.longform_prompts:
+            raise ValueError("longform_prompts is required for longform mode")
+        if self.run_mode == "multiturn" and not self.multiturn_turns and not self.multiturn_turns_file:
+            raise ValueError("multiturn_turns or multiturn_turns_file is required for multiturn mode")
         return self
 
     def container_environment(self) -> dict[str, str]:
@@ -144,6 +160,13 @@ _ENV_OVERRIDE_MAP = {
     "EVAL_MAX_GEN_TOKS": "eval_max_gen_toks",
     "EVAL_MAX_LENGTH": "eval_max_length",
     "EVAL_TIMEOUT": "eval_timeout",
+    "ENABLE_THINKING": "enable_thinking",
+    "CHAT_PROMPT": "chat_prompt",
+    "CHAT_STREAM": "chat_stream",
+    "CHAT_MAX_TOKENS": "chat_max_tokens",
+    "CHAT_TEMPERATURE": "chat_temperature",
+    "LONGFORM_MAX_TOKENS": "longform_max_tokens",
+    "MULTITURN_MAX_TOKENS": "multiturn_max_tokens",
 }
 
 

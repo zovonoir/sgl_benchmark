@@ -56,6 +56,15 @@ python -m vllm_bench --config <config.yaml> --dry-run
 - `benchmark`: starts `vllm serve` and runs the serving throughput benchmark.
 - `eval`: starts `vllm serve` and runs `lm_eval` with the `local-completions`
   backend.
+- `chat`: sends a single prompt, or prompts from stdin, through
+  `/v1/chat/completions`.
+- `longform`: sends configured long-form prompts through `/v1/chat/completions`
+  and saves the outputs.
+- `multiturn`: sends a configured multi-turn conversation while preserving
+  assistant history between turns.
+
+`profile` is not supported in `vllm_bench` yet. Use `sgl_bench` profile mode for
+SGLang profiling, or add a vLLM-specific profiling runner later.
 
 The mode can be set in YAML:
 
@@ -71,13 +80,15 @@ python -m vllm_bench --config <benchmark-config.yaml> --run-mode eval
 
 Command-line overrides currently include:
 
-- `--run-mode benchmark|eval`
+- `--run-mode benchmark|eval|chat|longform|multiturn`
 - `--port`
 - `--num-warmups`
 - `--eval-tasks`
 - `--eval-num-fewshot`
 - `--eval-limit`
 - `--eval-num-concurrent`
+- `--chat-prompt`
+- `--chat-max-tokens`
 
 The runner does not rewrite `server_args` when switching modes. If an eval
 prompt exceeds a configured `--max-model-len`, the user should increase that
@@ -147,6 +158,10 @@ docker_run_args:
   `num_prompts`.
 - `eval_tasks`, `eval_num_fewshot`, `eval_limit`, `eval_num_concurrent`: eval
   settings used in `run_mode: eval`.
+- `chat_prompt`, `chat_max_tokens`, `chat_temperature`: chat mode settings.
+- `longform_prompts`, `longform_max_tokens`: long-form generation settings.
+- `multiturn_turns`, `multiturn_turns_file`, `multiturn_max_tokens`: multi-turn
+  conversation settings.
 
 For DeepSeek-V4-Pro on the mounted cache used here, set:
 
@@ -167,6 +182,9 @@ container_env:
 | `deepseek_v4_pro_tp8_gsm8k_eval_nightly_nomtp_image.yaml` | No-MTP accuracy recipe using the retagged accuracy-good image. |
 | `deepseek_v4_pro_tp8_1k1k_mtp_perf_acc_base1_image.yaml` | MTP 1K/1K benchmark using the accuracy-good image. |
 | `deepseek_v4_pro_tp8_gsm8k_eval_mtp_perf_acc_base1_image.yaml` | MTP GSM8K 20-shot eval using the accuracy-good image. |
+| `deepseek_v4_pro_tp8_chat_mtp_perf_acc_base1_image.yaml` | MTP single-shot chat example. |
+| `deepseek_v4_pro_tp8_longform_mtp_perf_acc_base1_image.yaml` | MTP long-form generation example. |
+| `deepseek_v4_pro_tp8_multiturn_mtp_perf_acc_base1_image.yaml` | MTP multi-turn conversation example. |
 
 ## Known Good Results
 
@@ -208,6 +226,34 @@ vllm_bench/runs/run_<timestamp>/
     ├── meta_<result>.json
     ├── results_gsm8k_fewshot20/
     └── server_<result>.log
+```
+
+Chat mode writes:
+
+```text
+vllm_bench/runs/run_<timestamp>/chat/
+├── chat_log.txt
+├── chat_result.json
+└── server_<result>.log
+```
+
+Longform mode writes:
+
+```text
+vllm_bench/runs/run_<timestamp>/longform/
+├── longform_results.txt
+├── longform_results.json
+└── server_<result>.log
+```
+
+Multiturn mode writes:
+
+```text
+vllm_bench/runs/run_<timestamp>/multiturn/
+├── accuracy_multiturn_multiturn.txt
+├── multiturn_results.json
+├── _multiturn_turns.json
+└── server_<result>.log
 ```
 
 ## Cleanup

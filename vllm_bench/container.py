@@ -129,6 +129,8 @@ class ExistingContainerManager:
         merged_env = dict(self._env)
         if environment:
             merged_env.update(environment)
+        merged_env = {str(key): "" if value is None else str(value) for key, value in merged_env.items()}
+        cmd = [str(part) for part in cmd]
 
         try:
             if stream:
