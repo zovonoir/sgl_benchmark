@@ -29,7 +29,7 @@ container_env:
   - "CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7"
 
 extra_container_mounts:
-  - "/home/sabre/sashao:/dockerx"
+  - /home/jialzhu:/dockerx
 
 docker_run_args:
   group_add: ["video"]
