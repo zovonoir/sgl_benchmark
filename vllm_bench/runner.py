@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shlex
 import sys
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -541,6 +542,33 @@ print("cleanup_targets=" + ",".join(map(str, targets)))
         exit_code, output = self.container.exec_run(["bash", "-lc", shell], environment=environment)
         if exit_code != 0:
             raise RuntimeError(output.decode("utf-8", "ignore"))
+        self._start_server_log_tail(server_log, pid_file)
+
+    def _start_server_log_tail(self, server_log: str, pid_file: str) -> None:
+        """Stream vLLM server logs while the server process is alive."""
+
+        def _tail() -> None:
+            tail_cmd = (
+                f"while [ ! -f {shlex.quote(pid_file)} ]; do sleep 1; done; "
+                f"pid=$(cat {shlex.quote(pid_file)}); "
+                f"while [ ! -f {shlex.quote(server_log)} ]; do "
+                f"kill -0 \"$pid\" 2>/dev/null || exit 0; sleep 1; "
+                f"done; "
+                f"tail --pid=\"$pid\" -n +1 -F {shlex.quote(server_log)}"
+            )
+            try:
+                _, output_stream = self.container.exec_run(
+                    ["bash", "-lc", tail_cmd],
+                    stream=True,
+                )
+                for chunk in output_stream:
+                    sys.stdout.buffer.write(chunk)
+                    sys.stdout.buffer.flush()
+            except Exception:
+                pass
+
+        print(f">>> Streaming vLLM server log: {server_log}")
+        threading.Thread(target=_tail, daemon=True).start()
 
     def _server_command(self, extra_args: list[str] | None = None) -> list[str]:
         cmd = ["vllm", "serve", self.config.model_path]
