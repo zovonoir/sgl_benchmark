@@ -74,6 +74,7 @@ class SuiteConfig(BaseModel):
     request_rate: str = "inf"
     burstiness: float = 1.0
     num_warmups: int = 128
+    restart_vllm_server: bool = True
     benchmark_ignore_eos: bool = True
     benchmark_temperature: float | None = None
     benchmark_extra_request_body: dict[str, Any] = Field(default_factory=dict)

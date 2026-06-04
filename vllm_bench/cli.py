@@ -97,6 +97,7 @@ def _print_dry_run(config: SuiteConfig, run_dir: Path, project_root: Path) -> No
         print(f"  request_rate={config.request_rate}")
         print(f"  burstiness={config.burstiness}")
         print(f"  num_warmups={config.num_warmups}")
+        print(f"  restart_vllm_server={config.restart_vllm_server}")
         print(f"  ignore_eos={config.benchmark_ignore_eos}")
     elif config.run_mode == "eval":
         print("\n[5] Eval:")
