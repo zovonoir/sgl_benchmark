@@ -17,7 +17,7 @@ precision: "fp4"
 runner_type: "mi355x"
 framework: "vllm"
 port: 8001
-health_timeout: 1800
+health_timeout: 240
 
 container_env:
   - "HF_HOME=/.cache/huggingface/"
@@ -27,7 +27,6 @@ container_env:
   - "CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7"
 
 extra_container_mounts:
-  - "/home/sabre/model:/.cache/huggingface"
   - "/home/sabre/sashao:/dockerx"
 
 docker_run_args:

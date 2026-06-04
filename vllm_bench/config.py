@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
 import os
 import shlex
-from typing import Literal
+from pathlib import Path
+from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class TestCaseConfig(BaseModel):
@@ -45,14 +45,14 @@ class SuiteConfig(BaseModel):
     run_mode: Literal["benchmark", "eval", "chat", "longform", "multiturn", "profile"] = "benchmark"
     model_path: str
     model_prefix: str
-    host_model_mount_path: str | None = None
+    host_model_mount_path: str
     precision: str = "fp4"
     runner_type: str = "mi355x"
     framework: str = "vllm"
 
     # Runtime settings.
     port: int = 8001
-    health_timeout: int = 1800  # seconds
+    health_timeout: int = 240  # polling rounds, 5 seconds each
     container_env: list[str] = Field(default_factory=list)
     entrypoint: str | None = None
     command: str | list[str] | None = None
@@ -103,6 +103,13 @@ class SuiteConfig(BaseModel):
     multiturn_turns_file: str | None = None
     multiturn_turns: list[str] = Field(default_factory=list)
     multiturn_max_tokens: int = 2048
+
+    @field_validator("host_model_mount_path")
+    @classmethod
+    def _check_model_path_exists(cls, v: str) -> str:
+        if not Path(v).is_dir():
+            raise ValueError(f"host_model_mount_path not found: {v}")
+        return v
 
     @model_validator(mode="after")
     def _check_required_cases(self) -> "SuiteConfig":

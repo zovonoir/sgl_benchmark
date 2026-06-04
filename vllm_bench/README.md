@@ -116,6 +116,7 @@ Use this when the runner should create a temporary container:
 ```yaml
 image: "vllm/vllm-openai-rocm:perf_acc_base1"
 container_name: "vllm-bench-dsv4"
+host_model_mount_path: "/home/sabre/model"
 entrypoint: "/bin/bash"
 command:
   - "-lc"
@@ -130,8 +131,11 @@ benchmark arguments and makes setup/cleanup predictable.
 Common ROCm docker settings:
 
 ```yaml
-extra_container_mounts:
-  - "/home/sabre/model:/.cache/huggingface"
+# Same as sgl_bench: image mode automatically mounts this path to
+# /.cache/huggingface/ and to the same path inside the container.
+host_model_mount_path: "/home/sabre/model"
+
+health_timeout: 240  # 240 polls x 5s = 1200s
 
 docker_run_args:
   group_add: ["video"]
@@ -148,6 +152,11 @@ docker_run_args:
 
 - `model_path`: model repo id or local model path passed to `vllm serve`.
 - `model_prefix`: short name used in result filenames.
+- `host_model_mount_path`: host-side model/cache directory. In image mode it is
+  automatically mounted to `/.cache/huggingface/` and to the same container path,
+  matching `sgl_bench`.
+- `health_timeout`: server health-check polling rounds. Each round waits 5
+  seconds, matching `sgl_bench`.
 - `container_env`: environment injected into every `docker exec`.
 - `server_args`: arguments appended to `vllm serve`; the framework treats them
   as user-owned and does not auto-correct them.

@@ -9,7 +9,7 @@ precision: "fp4"
 runner_type: "mi355x"
 framework: "vllm"
 port: 8001
-health_timeout: 1800
+health_timeout: 240
 
 container_env:
   - "HF_HUB_CACHE=/.cache/huggingface"

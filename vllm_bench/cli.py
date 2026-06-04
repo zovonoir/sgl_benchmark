@@ -60,7 +60,7 @@ def _print_dry_run(config: SuiteConfig, run_dir: Path, project_root: Path) -> No
     print(f"  Runner type: {config.runner_type}")
     print(f"  Framework: {config.framework}")
     print(f"  Port: {config.port}")
-    print(f"  Health timeout: {config.health_timeout}s")
+    print(f"  Health timeout: {config.health_timeout * 5}s ({config.health_timeout} polls x 5s)")
     print(f"  TP: {config.tensor_parallel_size()}")
 
     print(f"\n[2] Suite Injection:")
@@ -68,6 +68,9 @@ def _print_dry_run(config: SuiteConfig, run_dir: Path, project_root: Path) -> No
     print(f"  Container suite path: {config.suite_path_in_container}")
     print("  Mode: docker archive copy into existing container")
     if config.image:
+        print("  Model mounts:")
+        print(f"    {config.host_model_mount_path} -> /.cache/huggingface/")
+        print(f"    {config.host_model_mount_path} -> {config.host_model_mount_path}")
         print(f"  Docker run args: {config.docker_run_args}")
         print(f"  Extra mounts: {config.extra_container_mounts}")
     if config.post_start_commands:

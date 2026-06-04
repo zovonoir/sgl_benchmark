@@ -91,7 +91,19 @@ class ExistingContainerManager:
         print(f">>> Started container {self.container_name} from image: {self.config.image}")
 
     def _build_mounts(self) -> list[docker.types.Mount]:
+        extra_targets = {
+            _normalize_mount_target(spec.split(":", 2)[1])
+            for spec in self.config.extra_container_mounts
+            if ":" in spec
+        }
         mounts = []
+        auto_mounts = [
+            (self.config.host_model_mount_path, "/.cache/huggingface/"),
+            (self.config.host_model_mount_path, self.config.host_model_mount_path),
+        ]
+        for src, dst in auto_mounts:
+            if _normalize_mount_target(dst) not in extra_targets:
+                mounts.append(docker.types.Mount(target=dst, source=src, type="bind"))
         for spec in self.config.extra_container_mounts:
             parts = spec.split(":")
             if len(parts) < 2:
@@ -255,6 +267,10 @@ class ExistingContainerManager:
             if not str(target).startswith(str(dest)):
                 raise ContainerError(f"Unsafe path in archive: {member.name}")
         tar.extractall(dest)
+
+
+def _normalize_mount_target(value: str) -> str:
+    return value.rstrip("/") or "/"
 
 
 def quote(value: str) -> str:

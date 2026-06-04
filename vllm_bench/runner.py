@@ -561,7 +561,8 @@ print("cleanup_targets=" + ",".join(map(str, targets)))
 
     def _wait_ready(self, container_case_dir: str) -> None:
         pid_file = f"{container_case_dir}/server.pid"
-        deadline = time.monotonic() + self.config.health_timeout
+        timeout_seconds = self.config.health_timeout * 5
+        deadline = time.monotonic() + timeout_seconds
         url = f"http://localhost:{self.config.port}/v1/models"
         print(f">>> Waiting for vLLM server: {url}")
         last_progress = 0.0
@@ -586,11 +587,14 @@ print("cleanup_targets=" + ",".join(map(str, targets)))
 
             now = time.monotonic()
             if now - last_progress > 60:
-                elapsed = int(self.config.health_timeout - (deadline - now))
+                elapsed = int(timeout_seconds - (deadline - now))
                 print(f">>> Still waiting for vLLM server... {elapsed}s elapsed")
                 last_progress = now
             time.sleep(5)
-        raise TimeoutError(f"vLLM server did not become ready within {self.config.health_timeout}s")
+        raise TimeoutError(
+            f"vLLM server did not become ready within {timeout_seconds}s "
+            f"({self.config.health_timeout} polls x 5s)"
+        )
 
     def _run_benchmark(
         self,
