@@ -51,34 +51,44 @@ class VllmBenchmarkRunner:
                 self._run_profile()
                 return
 
-            for idx, test_case in enumerate(self.config.test_configs, start=1):
-                case_name = self._case_name(idx, test_case)
-                host_case_dir = self.run_dir / case_name
-                container_case_dir = f"{self.container.output_path}/{case_name}"
-                result_stem = self._result_stem(case_name, test_case)
+            server_started = False
+            try:
+                for idx, test_case in enumerate(self.config.test_configs, start=1):
+                    case_name = self._case_name(idx, test_case)
+                    host_case_dir = self.run_dir / case_name
+                    container_case_dir = f"{self.container.output_path}/{case_name}"
+                    result_stem = self._result_stem(case_name, test_case)
 
-                print(f"\n>>> [{idx}/{len(self.config.test_configs)}] {case_name}")
-                print(
-                    f">>> CONC={test_case.concurrency} ISL={test_case.isl} "
-                    f"OSL={test_case.osl} NP={test_case.num_prompts}"
-                )
+                    print(f"\n>>> [{idx}/{len(self.config.test_configs)}] {case_name}")
+                    print(
+                        f">>> CONC={test_case.concurrency} ISL={test_case.isl} "
+                        f"OSL={test_case.osl} NP={test_case.num_prompts}"
+                    )
 
-                started_at = time.time()
-                try:
-                    self._prepare_case_dir(container_case_dir)
-                    self._log_gpu_pids(container_case_dir, "gpu_pids_before_cleanup.log")
-                    self.cleanup_best_effort()
-                    self._start_server(container_case_dir, result_stem)
-                    self._wait_ready(container_case_dir)
-                    bench_rc = self._run_benchmark(container_case_dir, result_stem, test_case)
-                    elapsed = int(time.time() - started_at)
-                    self._write_container_status(container_case_dir, bench_rc, elapsed)
-                    self.container.copy_case_results(case_name, host_case_dir)
-                    self._write_meta_and_aggregate(host_case_dir, case_name, result_stem, test_case)
-                    if bench_rc != 0:
-                        raise RuntimeError(f"Benchmark exited with code {bench_rc}")
-                finally:
-                    self._log_gpu_pids(container_case_dir, "gpu_pids_before_final_cleanup.log")
+                    started_at = time.time()
+                    try:
+                        self._prepare_case_dir(container_case_dir)
+                        self._log_gpu_pids(container_case_dir, "gpu_pids_before_cleanup.log")
+                        if not server_started:
+                            self.cleanup_best_effort()
+                            self._start_server(container_case_dir, result_stem)
+                            self._wait_ready(container_case_dir)
+                            server_started = True
+                        else:
+                            print(">>> Reusing existing vLLM server for this case")
+                        bench_rc = self._run_benchmark(container_case_dir, result_stem, test_case)
+                        elapsed = int(time.time() - started_at)
+                        self._write_container_status(container_case_dir, bench_rc, elapsed)
+                        self.container.copy_case_results(case_name, host_case_dir)
+                        self._write_meta_and_aggregate(host_case_dir, case_name, result_stem, test_case)
+                        if bench_rc != 0:
+                            raise RuntimeError(f"Benchmark exited with code {bench_rc}")
+                    finally:
+                        self._log_gpu_pids(container_case_dir, "gpu_pids_before_final_cleanup.log")
+                        # Temporary: keep vLLM alive between benchmark cases to avoid slow model reloads.
+                        # self.cleanup_best_effort()
+            finally:
+                if server_started:
                     self.cleanup_best_effort()
 
             generate_summary(self.run_dir)
