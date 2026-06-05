@@ -1,16 +1,18 @@
 # vllm
-docker run -it --name zov-dsv4-perf \
+docker run -it --name zov-dsv4-perf2-upgrade-aiter2 \
     --group-add=video \
     --cap-add=SYS_PTRACE \
     --security-opt seccomp=unconfined \
     --device /dev/kfd \
     --device /dev/dri \
-    -v /data/huggingface-cache/hub:/.cache/huggingface \
-	-v /home/jialzhu:/dockerx \
+    -v /home/sabre/model:/.cache/huggingface \
+	-v /home/sabre:/dockerx \
 	--cap-add=SYS_PTRACE --privileged  \
 	--device /dev/dri:/dev/dri --device /dev/kfd:/dev/kfd \
     --ipc=host \
 	--network=host \
+    --shm-size=128g \
+    --tmpfs /model_ram:size=1024G,mode=1777 \
 	--entrypoint /bin/bash \
     vllm/vllm-openai-rocm:nightly
 

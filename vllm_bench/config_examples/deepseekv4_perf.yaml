@@ -4,7 +4,7 @@
 # container_name: "vllm-bench-dsv4-mtp-perf"
 # entrypoint: "/bin/bash"
 # existing_container: zov-dsv4-perf2
-existing_container: zov-dsv4-perf2-upgrade-aiter
+existing_container: zov-dsv4-perf2-upgrade-aiter2
 command:
   - "-lc"
   - "while true; do sleep 3600; done"
@@ -13,6 +13,7 @@ model_path: "deepseek-ai/DeepSeek-V4-Pro"
 model_prefix: "deepseek_v4_pro_mtp"
 host_model_mount_path: "/home/sabre/model"
 
+restart_vllm_server: False
 precision: "fp4"
 runner_type: "mi355x"
 framework: "vllm"
@@ -35,7 +36,7 @@ container_env:
   - "VLLM_ROCM_USE_AITER_MOE=1"
   - "CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7"
   - "HF_HUB_OFFLINE=1"
-  - "PYTHONPATH=/app/vllm:/app/aiter:$PYTHONPATH"
+  - "PYTHONPATH=/app/vllm:$PYTHONPATH"
 
 # extra_container_mounts:
 #   - "/home/sabre/sashao:/dockerx"
@@ -75,6 +76,13 @@ num_warmups: 2
 benchmark_ignore_eos: true
 
 test_configs:
+# warmup
+  - concurrency: 1
+    isl: 8192
+    osl: 1024
+    num_prompts: 16
+
+# test_configs:
 # warmup
   - concurrency: 64
     isl: 128
