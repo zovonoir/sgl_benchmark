@@ -142,6 +142,7 @@ def _print_dry_run(config: SuiteConfig, run_dir: Path, project_root: Path) -> No
                 f"osl={case.osl} prompts={num_prompts}"
             )
             print(f"    profile_with_stack={case.profile_with_stack}")
+            print(f"    profile_record_shapes={case.profile_record_shapes}")
             print(f"    VLLM_TORCH_PROFILER_DIR={profile_dir}")
             print(f"    VLLM_RPC_TIMEOUT=1800000")
             print(

@@ -190,6 +190,7 @@ class VllmBenchmarkRunner:
                 f"OSL={profile_case.osl} NP={num_prompts}"
             )
             print(f">>> profile_with_stack={profile_case.profile_with_stack}")
+            print(f">>> profile_record_shapes={profile_case.profile_record_shapes}")
 
             started_at = time.time()
             rc = 1
@@ -208,6 +209,7 @@ class VllmBenchmarkRunner:
                     extra_args=self._profile_server_args(
                         container_profile_dir,
                         profile_case.profile_with_stack,
+                        profile_case.profile_record_shapes,
                     ),
                 )
                 self._wait_ready(container_case_dir)
@@ -913,11 +915,16 @@ print("cleanup_targets=" + ",".join(map(str, targets)))
         }
 
     @staticmethod
-    def _profile_server_args(profile_dir: str, profile_with_stack: bool) -> list[str]:
+    def _profile_server_args(
+        profile_dir: str,
+        profile_with_stack: bool,
+        profile_record_shapes: bool,
+    ) -> list[str]:
         profiler_config = {
             "profiler": "torch",
             "torch_profiler_dir": profile_dir,
             "torch_profiler_with_stack": profile_with_stack,
+            "torch_profiler_record_shapes": profile_record_shapes,
             "torch_profiler_use_gzip": True,
         }
         return ["--profiler-config", json.dumps(profiler_config, ensure_ascii=False)]

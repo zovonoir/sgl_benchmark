@@ -66,7 +66,7 @@ server_args:
   - "--reasoning-parser deepseek_v4"
   - "--kv-cache-dtype fp8"
   - "--compilation-config '{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\"}'"
-  # - "--enforce-eager"
+  - "--enforce-eager"
   # - "--speculative-config '{\"method\":\"mtp\",\"num_speculative_tokens\":2}'"
 
 random_range_ratio: 1.0
@@ -74,6 +74,13 @@ request_rate: "inf"
 burstiness: 1.0
 num_warmups: 2
 benchmark_ignore_eos: true
+
+profile_configs:
+  - concurrency: 1
+    isl: 102400
+    osl: 5
+    num_prompts: 1
+    profile_with_stack: true
 
 test_configs:
 # warmup

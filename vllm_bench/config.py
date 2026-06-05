@@ -28,6 +28,7 @@ class ProfileCaseConfig(BaseModel):
     osl: int = 5
     num_prompts: int | None = None
     profile_with_stack: bool = True
+    profile_record_shapes: bool = True
 
 
 class SuiteConfig(BaseModel):
