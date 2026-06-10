@@ -1,0 +1,92 @@
+# DeepSeek-V4-Pro vLLM TP8 1K/1K throughput using perf_acc_base1 image with MTP.
+# Matches the shared MTP recipe plus the standard 1K/1K benchmark workload.
+# image: "vllm/vllm-openai-rocm:perf_acc_base1"
+# container_name: "vllm-bench-dsv4-mtp-perf"
+# entrypoint: "/bin/bash"
+# existing_container: zov-dsv4-perf2
+existing_container: zov-dsv4-perf2-upgrade-aiter2
+command:
+  - "-lc"
+  - "while true; do sleep 3600; done"
+
+model_path: "deepseek-ai/DeepSeek-V4-Pro"
+model_prefix: "deepseek_v4_pro_mtp"
+host_model_mount_path: "/home/sabre/model"
+
+restart_vllm_server: False
+precision: "fp4"
+runner_type: "mi355x"
+framework: "vllm"
+port: 9090
+health_timeout: 240
+eval_imit: 100
+# post_start_commands:
+#   - "python3 -m pip install git+https://github.com/EleutherAI/lm-evaluation-harness.git tenacity"
+
+
+container_env:
+  - "HF_HOME=/.cache/huggingface/"
+  - "HF_HUB_CACHE=/.cache/huggingface"
+  - "SNAP=/.cache/huggingface/models--deepseek-ai--DeepSeek-V4-Pro/snapshots/89d501aed998d33fa4f4702102ec1bb2331e10f6"
+  # - "HF_HOME=/model_ram"
+  # - "HF_HUB_CACHE=/model_ram"
+  # - "SNAP=/model_ram/models--deepseek-ai--DeepSeek-V4-Pro/snapshots/89d501aed998d33fa4f4702102ec1bb2331e10f6"
+  - "TRANSFORMERS_OFFLINE=1"
+  - "VLLM_ROCM_USE_AITER=1"
+  - "VLLM_ROCM_USE_AITER_MOE=1"
+  - "CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7"
+  - "HF_HUB_OFFLINE=1"
+  - "PYTHONPATH=/app/vllm:$PYTHONPATH"
+
+# extra_container_mounts:
+#   - "/home/sabre/sashao:/dockerx"
+
+docker_run_args:
+  group_add: ["video"]
+  cap_add: ["SYS_PTRACE"]
+  security_opt: ["seccomp=unconfined"]
+  devices:
+    - "/dev/kfd"
+    - "/dev/dri"
+    - "/dev/dri:/dev/dri"
+    - "/dev/kfd:/dev/kfd"
+  privileged: true
+  ipc_mode: "host"
+
+server_args:
+  - "--host localhost"
+  - "--dtype auto"
+  - "--tensor-parallel-size 4"
+  - "--data-parallel-size 2"
+  - "--enable-expert-parallel"
+  - "--max-num-seqs 128"
+  - "--distributed-executor-backend mp"
+  - "--trust-remote-code"
+  - "--gpu-memory-utilization 0.6"
+  - "--moe-backend aiter"
+  - "--tokenizer-mode deepseek_v4"
+  - "--reasoning-parser deepseek_v4"
+  - "--kv-cache-dtype fp8"
+  - "--compilation-config '{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\"}'"
+  - "--enforce-eager"
+  # - "--speculative-config '{\"method\":\"mtp\",\"num_speculative_tokens\":2}'"
+
+random_range_ratio: 1.0
+request_rate: "inf"
+burstiness: 1.0
+num_warmups: 2
+benchmark_ignore_eos: true
+
+profile_configs:
+  - concurrency: 1
+    isl: 102400
+    osl: 5
+    num_prompts: 1
+    profile_with_stack: true
+
+test_configs:
+# warmup
+  - concurrency: 128
+    isl: 8192
+    osl: 1024
+    num_prompts: 256
