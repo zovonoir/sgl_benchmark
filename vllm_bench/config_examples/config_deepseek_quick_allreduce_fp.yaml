@@ -38,6 +38,10 @@ container_env:
   - "CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7"
   - "HF_HUB_OFFLINE=1"
   - "PYTHONPATH=/app/vllm:$PYTHONPATH"
+  - "VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=FP"
+  # - "VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4"
+  # - "VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT6"
+  # - "VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT8"
 
 # extra_container_mounts:
 #   - "/home/sabre/sashao:/dockerx"
@@ -69,6 +73,7 @@ server_args:
   - "--reasoning-parser deepseek_v4"
   - "--kv-cache-dtype fp8"
   - "--compilation-config '{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"pass_config\":{\"fuse_allreduce_rms\":true}}'"
+  - "--disable-custom-all-reduce"
   # - "--enforce-eager"
   # - "--speculative-config '{\"method\":\"mtp\",\"num_speculative_tokens\":2}'"
   # - "--compilation-config '{"pass_config":{"fuse_allreduce_rms":true}}'
@@ -107,4 +112,3 @@ test_configs:
     isl: 102400
     osl: 1
     num_prompts: 4
-

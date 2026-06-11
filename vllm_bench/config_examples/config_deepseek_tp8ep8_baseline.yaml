@@ -1,3 +1,4 @@
+
 # DeepSeek-V4-Pro vLLM TP8 1K/1K throughput using perf_acc_base1 image with MTP.
 # Matches the shared MTP recipe plus the standard 1K/1K benchmark workload.
 # image: "vllm/vllm-openai-rocm:perf_acc_base1"
@@ -59,7 +60,7 @@ server_args:
   - "--dtype auto"
   - "--tensor-parallel-size 8"
   # - "--data-parallel-size 2"
-  # - "--enable-expert-parallel"
+  - "--enable-expert-parallel"
   - "--max-num-seqs 128"
   - "--distributed-executor-backend mp"
   - "--trust-remote-code"

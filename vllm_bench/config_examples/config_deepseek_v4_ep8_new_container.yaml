@@ -1,37 +1,26 @@
-# DeepSeek-V4-Pro vLLM TP8 1K/1K throughput using perf_acc_base1 image with MTP.
-# Matches the shared MTP recipe plus the standard 1K/1K benchmark workload.
-# image: "vllm/vllm-openai-rocm:perf_acc_base1"
-# container_name: "vllm-bench-dsv4-mtp-perf"
-# entrypoint: "/bin/bash"
-# existing_container: zov-dsv4-perf2
-# existing_container: zov-dsv4-perf2-upgrade-aiter2
-existing_container: zov-dsv4
+# Local DeepSeek-V4-Pro vLLM TP8 benchmark in a fresh Docker container.
+image: "sabreshao/vllm:dsv4_0605"
+container_name: "zov-dsv4-bench-local"
+entrypoint: "/bin/bash"
 command:
   - "-lc"
   - "while true; do sleep 3600; done"
 
 model_path: "/.cache/huggingface/deepseek-v4-pro"
 model_prefix: "deepseek_v4_pro_mtp"
-host_model_mount_path: "/mnt/deepseek-v4-pro"
+host_model_mount_path: "/mnt"
 
-restart_vllm_server: False
+restart_vllm_server: false
 precision: "fp4"
 runner_type: "mi355x"
 framework: "vllm"
 port: 9090
 health_timeout: 240
-eval_imit: 100
-# post_start_commands:
-#   - "python3 -m pip install git+https://github.com/EleutherAI/lm-evaluation-harness.git tenacity"
-
 
 container_env:
   - "HF_HOME=/.cache/huggingface/"
   - "HF_HUB_CACHE=/.cache/huggingface"
   - "SNAP=/.cache/huggingface/deepseek-v4-pro/"
-  # - "HF_HOME=/model_ram"
-  # - "HF_HUB_CACHE=/model_ram"
-  # - "SNAP=/model_ram/models--deepseek-ai--DeepSeek-V4-Pro/snapshots/89d501aed998d33fa4f4702102ec1bb2331e10f6"
   - "TRANSFORMERS_OFFLINE=1"
   - "VLLM_ROCM_USE_AITER=1"
   - "VLLM_ROCM_USE_AITER_MOE=1"
@@ -39,8 +28,8 @@ container_env:
   - "HF_HUB_OFFLINE=1"
   - "PYTHONPATH=/app/vllm:$PYTHONPATH"
 
-# extra_container_mounts:
-#   - "/home/sabre/sashao:/dockerx"
+extra_container_mounts:
+  - "/home/jialzhu:/dockerx"
 
 docker_run_args:
   group_add: ["video"]
@@ -53,13 +42,16 @@ docker_run_args:
     - "/dev/kfd:/dev/kfd"
   privileged: true
   ipc_mode: "host"
+  network_mode: "host"
+  shm_size: "128g"
+  tmpfs:
+    "/model_ram": "size=1024G,mode=1777"
 
 server_args:
   - "--host localhost"
   - "--dtype auto"
   - "--tensor-parallel-size 8"
-  # - "--data-parallel-size 2"
-  # - "--enable-expert-parallel"
+  - "--enable-expert-parallel"
   - "--max-num-seqs 128"
   - "--distributed-executor-backend mp"
   - "--trust-remote-code"
@@ -69,9 +61,6 @@ server_args:
   - "--reasoning-parser deepseek_v4"
   - "--kv-cache-dtype fp8"
   - "--compilation-config '{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"pass_config\":{\"fuse_allreduce_rms\":true}}'"
-  # - "--enforce-eager"
-  # - "--speculative-config '{\"method\":\"mtp\",\"num_speculative_tokens\":2}'"
-  # - "--compilation-config '{"pass_config":{"fuse_allreduce_rms":true}}'
 
 random_range_ratio: 1.0
 request_rate: "inf"
@@ -87,7 +76,6 @@ profile_configs:
     profile_with_stack: true
 
 test_configs:
-# warmup
   - concurrency: 128
     isl: 8192
     osl: 1024
@@ -107,4 +95,3 @@ test_configs:
     isl: 102400
     osl: 1
     num_prompts: 4
-

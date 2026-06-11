@@ -69,6 +69,7 @@ server_args:
   - "--reasoning-parser deepseek_v4"
   - "--kv-cache-dtype fp8"
   - "--compilation-config '{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"pass_config\":{\"fuse_allreduce_rms\":true}}'"
+  - "--disable-custom-all-reduce"
   # - "--enforce-eager"
   # - "--speculative-config '{\"method\":\"mtp\",\"num_speculative_tokens\":2}'"
   # - "--compilation-config '{"pass_config":{"fuse_allreduce_rms":true}}'
@@ -107,4 +108,5 @@ test_configs:
     isl: 102400
     osl: 1
     num_prompts: 4
+
 
