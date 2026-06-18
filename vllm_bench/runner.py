@@ -199,6 +199,15 @@ class VllmBenchmarkRunner:
                 self._prepare_profile_dir(container_profile_dir)
                 self._log_gpu_pids(container_case_dir, "gpu_pids_before_cleanup.log")
                 self.cleanup_best_effort()
+                profile_server_args = self._profile_server_args(
+                    container_profile_dir,
+                    profile_case.profile_with_stack,
+                    profile_case.profile_record_shapes,
+                )
+                if not self._server_args_have("--api-server-count"):
+                    # Keep profiler control requests on a single API server.
+                    profile_server_args.extend(["--api-server-count", "1"])
+
                 self._start_server(
                     container_case_dir,
                     result_stem,
@@ -206,11 +215,7 @@ class VllmBenchmarkRunner:
                         container_profile_dir,
                         profile_case.profile_with_stack,
                     ),
-                    extra_args=self._profile_server_args(
-                        container_profile_dir,
-                        profile_case.profile_with_stack,
-                        profile_case.profile_record_shapes,
-                    ),
+                    extra_args=profile_server_args,
                 )
                 self._wait_ready(container_case_dir)
                 rc = self._run_benchmark(container_case_dir, result_stem, test_case, profile=True)

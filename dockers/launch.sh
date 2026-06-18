@@ -1,5 +1,5 @@
 # vllm
-docker run -it --name zov-dsv4 \
+docker run -it --name zov-dsv4-0615-2 \
     --group-add=video \
     --cap-add=SYS_PTRACE \
     --security-opt seccomp=unconfined \
@@ -14,7 +14,8 @@ docker run -it --name zov-dsv4 \
     --shm-size=128g \
     --tmpfs /model_ram:size=1024G,mode=1777 \
 	--entrypoint /bin/bash \
-    -t sabreshao/vllm:dsv4_0605
+    -t sabreshao/vllm:dsv4_0615n
+
 
 
 # container_env:

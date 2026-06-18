@@ -1,0 +1,199 @@
+# DeepSeek-V4-Pro vLLM TP8 1K/1K throughput using perf_acc_base1 image with MTP.
+# Matches the shared MTP recipe plus the standard 1K/1K benchmark workload.
+# image: "vllm/vllm-openai-rocm:perf_acc_base1"
+# container_name: "vllm-bench-dsv4-mtp-perf"
+# entrypoint: "/bin/bash"
+# existing_container: zov-dsv4-perf2
+# existing_container: zov-dsv4-perf2-upgrade-aiter2
+existing_container: zov-dsv4-0615-2
+command:
+  - "-lc"
+  - "while true; do sleep 3600; done"
+
+model_path: "/.cache/huggingface/deepseek-v4-pro"
+model_prefix: "deepseek_v4_pro_mtp"
+host_model_mount_path: "/mnt/deepseek-v4-pro"
+
+restart_vllm_server: False
+precision: "fp4"
+runner_type: "mi355x"
+framework: "vllm"
+port: 9090
+health_timeout: 240
+eval_limit: 100
+eval_num_concurrent: 32
+#post_start_commands:
+#  - "python3 -m pip install git+https://github.com/EleutherAI/lm-evaluation-harness.git tenacity"
+
+
+container_env:
+  - "HF_HOME=/.cache/huggingface/"
+  - "HF_HUB_CACHE=/.cache/huggingface"
+  - "SNAP=/.cache/huggingface/deepseek-v4-pro/"
+  # - "HF_HOME=/model_ram"
+  # - "HF_HUB_CACHE=/model_ram"
+  # - "SNAP=/model_ram/models--deepseek-ai--DeepSeek-V4-Pro/snapshots/89d501aed998d33fa4f4702102ec1bb2331e10f6"
+  # - "TRANSFORMERS_OFFLINE=1"
+  - "VLLM_ROCM_USE_AITER=1"
+  - "VLLM_ROCM_USE_AITER_MOE=1"
+  - "VLLM_ROCM_SPARSE_PREFILL_OPUS=0"
+  - "CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7"
+  # - "HF_HUB_OFFLINE=1"
+  - "PYTHONPATH=/app/aiter/aiter:$PYTHONPATH"
+  - "VLLM_ENGINE_READY_TIMEOUT_S=3600"
+
+# extra_container_mounts:
+#   - "/home/sabre/sashao:/dockerx"
+
+docker_run_args:
+  group_add: ["video"]
+  cap_add: ["SYS_PTRACE"]
+  security_opt: ["seccomp=unconfined"]
+  devices:
+    - "/dev/kfd"
+    - "/dev/dri"
+    - "/dev/dri:/dev/dri"
+    - "/dev/kfd:/dev/kfd"
+  privileged: true
+  ipc_mode: "host"
+
+server_args:
+  - "--host localhost"
+  - "--dtype auto"
+  # - "--tensor-parallel-size 8"
+  - "--data-parallel-size 8"
+  - "--enable-expert-parallel"
+  - "--max-num-seqs 128"
+  - "--distributed-executor-backend mp"
+  - "--trust-remote-code"
+  - "--gpu-memory-utilization 0.6"
+  - "--moe-backend aiter"
+  - "--tokenizer-mode deepseek_v4"
+  - "--reasoning-parser deepseek_v4"
+  - "--kv-cache-dtype fp8"
+  - "--compilation-config '{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"pass_config\":{\"fuse_allreduce_rms\":true}}'"
+  # - "--disable-custom-all-reduce"
+  # - "--enforce-eager"
+  # - "--speculative-config '{\"method\":\"mtp\",\"num_speculative_tokens\":2}'"
+  # - "--compilation-config '{"pass_config":{"fuse_allreduce_rms":true}}'
+
+random_range_ratio: 1.0
+request_rate: "inf"
+burstiness: 1.0
+num_warmups: 2
+benchmark_ignore_eos: true
+
+profile_configs:
+  - concurrency: 8
+    isl: 102400
+    osl: 5
+    num_prompts: 8
+    profile_with_stack: true
+
+test_configs:
+# warmup
+  - concurrency: 128
+    isl: 8192
+    osl: 1024
+    num_prompts: 256
+
+  - concurrency: 1
+    isl: 102400
+    osl: 1
+    num_prompts: 2
+
+  - concurrency: 2
+    isl: 102400
+    osl: 1
+    num_prompts: 4
+
+  - concurrency: 4
+    isl: 102400
+    osl: 1
+    num_prompts: 8
+
+  - concurrency: 8
+    isl: 102400
+    osl: 1
+    num_prompts: 16
+
+  - concurrency: 16
+    isl: 102400
+    osl: 1
+    num_prompts: 32
+
+  - concurrency: 1
+    isl: 204800
+    osl: 1
+    num_prompts: 2
+
+  - concurrency: 2
+    isl: 204800
+    osl: 1
+    num_prompts: 4
+
+  - concurrency: 4
+    isl: 204800
+    osl: 1
+    num_prompts: 8
+
+  - concurrency: 8
+    isl: 204800
+    osl: 1
+    num_prompts: 16
+
+  - concurrency: 16
+    isl: 204800
+    osl: 1
+    num_prompts: 32
+
+  - concurrency: 1
+    isl: 8192
+    osl: 1024
+    num_prompts: 4
+
+  - concurrency: 2
+    isl: 8192
+    osl: 1024
+    num_prompts: 4
+
+  - concurrency: 4
+    isl: 8192
+    osl: 1024
+    num_prompts: 8
+
+  - concurrency: 8
+    isl: 8192
+    osl: 1024
+    num_prompts: 16
+
+  - concurrency: 16
+    isl: 8192
+    osl: 1024
+    num_prompts: 32
+
+  - concurrency: 1
+    isl: 16384
+    osl: 1024
+    num_prompts: 4
+
+  - concurrency: 2
+    isl: 16384
+    osl: 1024
+    num_prompts: 4
+
+  - concurrency: 4
+    isl: 16384
+    osl: 1024
+    num_prompts: 8
+
+  - concurrency: 8
+    isl: 16384
+    osl: 1024
+    num_prompts: 16
+
+  - concurrency: 16
+    isl: 16384
+    osl: 1024
+    num_prompts: 32
+
